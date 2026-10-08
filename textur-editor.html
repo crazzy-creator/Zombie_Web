@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Texturen-Editor</title>
+<style>
+  html,body{margin:0;height:100%;background:#141010;color:#e6dcdc;font-family:system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
+  #app{display:flex;flex-direction:column;height:100%}
+  header{display:flex;gap:6px;align-items:center;padding:6px;padding-top:calc(6px + max(env(safe-area-inset-top), var(--top, 0px)));padding-left:max(6px, env(safe-area-inset-left));padding-right:max(6px, env(safe-area-inset-right));position:relative;z-index:5;background:#1d1616;border-bottom:1px solid #4a3a3a;flex-wrap:wrap}
+  header h1{font-size:15px;margin:0 8px 0 2px}
+  button,select,label.btn{background:#2a2222;color:#ddd;border:1px solid #4a4040;border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer}
+  button.sel,button.main{background:#7a1318;border-color:#c4373e;color:#fff}
+  main{flex:1;display:flex;gap:8px;padding:8px;min-height:0}
+  .col{flex:1;display:flex;flex-direction:column;min-width:0;gap:6px}
+  .box{flex:1;min-height:0;background:#0c0909;border:1px solid #3a2e2e;border-radius:10px;position:relative;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+  input[type=range]{accent-color:#c4373e}
+  .hint{font-size:12px;color:#a89898}
+  @media (max-width:760px){main{flex-direction:column}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Texturen-Editor</h1>
+    <label class="btn">Bild laden<input id="file" type="file" accept="image/*" style="display:none"></label>
+    <select id="target"></select>
+    <button id="apply" class="main">Übernehmen</button>
+    <button id="save">Als PNG</button>
+    <button id="reset">Standard</button>
+    <button id="close" style="display:none">Schließen</button>
+  </header>
+  <main>
+    <div class="col">
+      <div class="box"><canvas id="src"></canvas></div>
+      <div class="row">
+        <button id="polyClose">Polygon schließen</button>
+        <button id="polyUndo">Punkt zurück</button>
+        <button id="polyClear">Auswahl löschen</button>
+        <span class="hint" id="polyInfo">Tippe Punkte um den Bildteil, der als Textur dienen soll.</span>
+      </div>
+    </div>
+    <div class="col">
+      <div class="box"><canvas id="prev"></canvas></div>
+      <div class="row">
+        <label>Helligkeit <input id="bright" type="range" min="0.5" max="1.6" step="0.02" value="1"></label>
+        <label>Sättigung <input id="sat" type="range" min="0" max="2" step="0.05" value="1"></label>
+        <label>Kachelgröße <input id="zoom" type="range" min="0.5" max="2.5" step="0.05" value="1"></label>
+      </div>
+      <div class="row">
+        <label><input id="seamless" type="checkbox" checked> Nahtlos machen</label>
+        <label><input id="rot" type="checkbox"> 90° drehen</label>
+        <span class="hint" id="info"></span>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+const OUT = {"torso":[[-17,-216],[-12,-228],[0,-235],[14,-234],[25,-224],[29,-211],[32,-203],[37,-197],[34,-194],[32,-191],[33,-186],[31,-181],[30,-175],[23,-172],[18,-166],[19,-151],[23,-139],[31,-125],[35,-106],[34,-86],[31,-67],[29,-48],[25,-24],[22,-5],[19,10],[0,14],[-26,12],[-31,-5],[-29,-29],[-26,-58],[-28,-86],[-31,-115],[-28,-139],[-19,-156],[-14,-173],[-20,-192],[-21,-206]],"armN":[[-6,-116],[-2,-110],[3,-105],[8,-100],[12,-95],[17,-90],[22,-85],[26,-79],[31,-74],[36,-69],[40,-64],[43,-58],[47,-52],[51,-46],[55,-39],[59,-33],[63,-27],[67,-20],[72,-15],[73,-9],[75,-3],[77,3],[81,10],[85,17],[89,23],[91,26],[94,28],[98,27],[101,25],[102,21],[102,17],[99,10],[97,3],[95,-5],[92,-10],[88,-16],[85,-21],[81,-28],[78,-35],[75,-42],[71,-49],[68,-55],[64,-62],[61,-68],[57,-76],[52,-82],[48,-88],[44,-94],[40,-99],[37,-105],[33,-111],[29,-117],[25,-122],[21,-128],[17,-134],[11,-139],[3,-140],[-4,-137],[-9,-130],[-9,-123]],"armF":[[-6,-110],[0,-107],[6,-104],[12,-101],[19,-98],[25,-95],[31,-92],[37,-89],[44,-85],[50,-82],[56,-80],[61,-76],[67,-71],[73,-67],[79,-62],[85,-58],[91,-54],[98,-49],[104,-46],[107,-41],[111,-36],[115,-31],[121,-26],[128,-22],[134,-17],[137,-15],[141,-15],[144,-17],[146,-20],[146,-24],[144,-27],[139,-33],[134,-39],[129,-45],[124,-49],[119,-53],[113,-57],[108,-62],[102,-67],[96,-72],[91,-77],[85,-82],[79,-87],[73,-91],[67,-96],[60,-101],[55,-105],[49,-108],[43,-112],[37,-116],[32,-120],[26,-124],[20,-128],[14,-132],[8,-136],[1,-138],[-6,-136],[-12,-130],[-14,-123],[-12,-115]],"beinN":[[-21,-9],[-19,15],[-16,49],[-11,78],[-7,101],[-10,120],[-7,144],[-2,168],[-1,182],[-7,192],[-6,202],[54,202],[59,197],[54,191],[32,187],[19,180],[19,168],[19,144],[20,115],[22,100],[22,85],[23,52],[24,18],[23,-11]],"beinF":[[-22,-12],[-24,12],[-25,46],[-25,75],[-24,100],[-29,119],[-28,143],[-26,167],[-26,182],[-32,192],[-31,202],[29,202],[34,197],[29,191],[7,187],[-6,181],[-5,169],[-2,145],[1,116],[5,102],[7,88],[13,54],[18,21],[22,-7]]};
+const TARGETS = [
+  ['wall_custom', 'Wand (Fläche) – eigene Textur', null],
+  ['floor_custom', 'Boden (Fläche) – eigene Textur', null],
+  ['skin_torso', 'Haut: Rumpf + Kopf', 'torso'],
+  ['skin_armN', 'Haut: Arm (vorn)', 'armN'],
+  ['skin_armF', 'Haut: Arm (hinten)', 'armF'],
+  ['skin_beinN', 'Haut: Bein (vorn)', 'beinN'],
+  ['skin_beinF', 'Haut: Bein (hinten)', 'beinF'],
+  ['flesh_torso', 'Fleisch: Rumpf + Kopf', 'torso'],
+  ['flesh_armN', 'Fleisch: Arm (vorn)', 'armN'],
+  ['flesh_armF', 'Fleisch: Arm (hinten)', 'armF'],
+  ['flesh_beinN', 'Fleisch: Bein (vorn)', 'beinN'],
+  ['flesh_beinF', 'Fleisch: Bein (hinten)', 'beinF'],
+];
+const $ = (id) => document.getElementById(id);
+const EMB = window.parent !== window;
+// Abstand oben (Statusleiste/Notch), vom Spiel übergeben: sonst liegt die Knopfreihe unter der Systemleiste
+const topQ = new URLSearchParams(location.search).get('top');
+if (topQ) document.documentElement.style.setProperty('--top', Math.max(0, +topQ || 0) + 'px');
+const sel = $('target');
+for (const [id, label] of TARGETS) { const o = document.createElement('option'); o.value = id; o.textContent = label; sel.appendChild(o); }
+if (EMB) $('close').style.display = '';
+
+let img = null;            // geladenes Bild
+let poly = [];             // Auswahl in Bildkoordinaten
+let closed = false;
+let tile = document.createElement('canvas'); tile.width = tile.height = 256;
+const src = $('src'), prev = $('prev');
+const sc = src.getContext('2d'), pc = prev.getContext('2d');
+
+function fit(c) { const r = c.getBoundingClientRect(); const d = window.devicePixelRatio || 1; c.width = Math.max(10, Math.round(r.width * d)); c.height = Math.max(10, Math.round(r.height * d)); }
+let view = { s: 1, ox: 0, oy: 0 };
+function layout() {
+  fit(src); fit(prev);
+  if (img) { view.s = Math.min(src.width / img.width, src.height / img.height) * 0.96; view.ox = (src.width - img.width * view.s) / 2; view.oy = (src.height - img.height * view.s) / 2; }
+  drawSrc(); drawPrev();
+}
+window.addEventListener('resize', layout);
+
+function drawSrc() {
+  sc.setTransform(1, 0, 0, 1, 0, 0);
+  sc.fillStyle = '#0c0909'; sc.fillRect(0, 0, src.width, src.height);
+  if (!img) { sc.fillStyle = '#6a5a5a'; sc.font = `${16 * (window.devicePixelRatio || 1)}px system-ui`; sc.textAlign = 'center'; sc.fillText('„Bild laden“ wählen', src.width / 2, src.height / 2); return; }
+  sc.drawImage(img, view.ox, view.oy, img.width * view.s, img.height * view.s);
+  if (poly.length) {
+    sc.beginPath();
+    poly.forEach(([x, y], i) => { const px = view.ox + x * view.s, py = view.oy + y * view.s; i ? sc.lineTo(px, py) : sc.moveTo(px, py); });
+    if (closed) sc.closePath();
+    sc.fillStyle = 'rgba(255,60,60,0.18)'; if (closed) sc.fill();
+    sc.strokeStyle = '#ff5050'; sc.lineWidth = 2 * (window.devicePixelRatio || 1); sc.stroke();
+    for (const [x, y] of poly) { sc.beginPath(); sc.arc(view.ox + x * view.s, view.oy + y * view.s, 4 * (window.devicePixelRatio || 1), 0, 6.3); sc.fillStyle = '#fff'; sc.fill(); }
+  }
+}
+
+src.addEventListener('pointerdown', (e) => {
+  if (!img || closed) return;
+  const r = src.getBoundingClientRect(); const d = src.width / r.width;
+  const x = ((e.clientX - r.left) * d - view.ox) / view.s, y = ((e.clientY - r.top) * d - view.oy) / view.s;
+  if (x < 0 || y < 0 || x > img.width || y > img.height) return;
+  if (poly.length > 2) { const [fx, fy] = poly[0]; if (Math.hypot(fx - x, fy - y) * view.s < 14 * (window.devicePixelRatio || 1)) { closed = true; build(); return; } }
+  poly.push([x, y]); build();
+});
+$('polyClose').onclick = () => { if (poly.length > 2) { closed = true; build(); } };
+$('polyUndo').onclick = () => { if (closed) closed = false; else poly.pop(); build(); };
+$('polyClear').onclick = () => { poly = []; closed = false; build(); };
+
+$('file').onchange = (e) => loadFile(e.target.files[0]);
+function loadFile(f) {
+  if (!f) return; const url = URL.createObjectURL(f); const im = new Image();
+  im.onload = () => { img = im; poly = []; closed = false; layout(); build(); };
+  im.src = url;
+}
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+
+/** Kachel (256×256) aus dem Bild bzw. dem Polygonausschnitt erzeugen */
+function build() {
+  const c = tile.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, 256, 256);
+  if (!img) { drawSrc(); drawPrev(); return; }
+  let minX = 0, minY = 0, maxX = img.width, maxY = img.height;
+  const use = closed && poly.length > 2;
+  if (use) { minX = Math.min(...poly.map((p) => p[0])); maxX = Math.max(...poly.map((p) => p[0])); minY = Math.min(...poly.map((p) => p[1])); maxY = Math.max(...poly.map((p) => p[1])); }
+  const w = Math.max(4, maxX - minX), h = Math.max(4, maxY - minY);
+  // Ausschnitt auf Arbeitsfläche zeichnen (Außenbereich des Polygons = Durchschnittsfarbe)
+  const work = document.createElement('canvas'); work.width = 256; work.height = 256; const wc = work.getContext('2d');
+  const avg = averageColor(use);
+  wc.fillStyle = avg; wc.fillRect(0, 0, 256, 256);
+  wc.save();
+  const k = Math.min(256 / w, 256 / h);
+  wc.translate((256 - w * k) / 2, (256 - h * k) / 2); wc.scale(k, k); wc.translate(-minX, -minY);
+  if (use) { wc.beginPath(); poly.forEach(([x, y], i) => i ? wc.lineTo(x, y) : wc.moveTo(x, y)); wc.closePath(); wc.clip(); }
+  wc.drawImage(img, 0, 0);
+  wc.restore();
+  // Drehen, Helligkeit, Sättigung
+  c.save();
+  c.filter = `brightness(${$('bright').value}) saturate(${$('sat').value})`;
+  if ($('rot').checked) { c.translate(128, 128); c.rotate(Math.PI / 2); c.translate(-128, -128); }
+  c.drawImage(work, 0, 0);
+  c.restore();
+  if ($('seamless').checked) makeSeamless(c);
+  $('info').textContent = img ? `Kachel 256×256 · Quelle ${img.width}×${img.height}` + (use ? ' · Polygon' : ' · ganzes Bild') : '';
+  drawSrc(); drawPrev();
+}
+function averageColor(use) {
+  const s = document.createElement('canvas'); s.width = s.height = 16; const x = s.getContext('2d'); x.drawImage(img, 0, 0, 16, 16);
+  const d = x.getImageData(0, 0, 16, 16).data; let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+  return `rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`;
+}
+/** Ränder weich ineinander blenden, damit die Kachel ohne Naht wiederholt werden kann */
+function makeSeamless(c) {
+  const S = 256, B = 40;
+  const src0 = document.createElement('canvas'); src0.width = src0.height = S; src0.getContext('2d').drawImage(tile, 0, 0);
+  const sh = document.createElement('canvas'); sh.width = sh.height = S; const x = sh.getContext('2d');
+  x.drawImage(src0, S / 2, S / 2); x.drawImage(src0, -S / 2, S / 2); x.drawImage(src0, S / 2, -S / 2); x.drawImage(src0, -S / 2, -S / 2);
+  // Maske: Mitte der verschobenen Kachel (Naht des Originals liegt dort) deckend, außen transparent
+  const mask = document.createElement('canvas'); mask.width = mask.height = S; const m = mask.getContext('2d');
+  const g = m.createRadialGradient(S / 2, S / 2, S / 2 - B * 2.2, S / 2, S / 2, S / 2 - 4);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  m.fillStyle = g; m.fillRect(0, 0, S, S);
+  x.globalCompositeOperation = 'destination-in'; x.drawImage(mask, 0, 0);
+  c.drawImage(sh, 0, 0);
+}
+['bright', 'sat', 'zoom', 'seamless', 'rot'].forEach((id) => $(id).addEventListener('input', build));
+sel.addEventListener('change', drawPrev);
+
+function drawPrev() {
+  const W = prev.width, H = prev.height; pc.setTransform(1, 0, 0, 1, 0, 0);
+  pc.fillStyle = '#0c0909'; pc.fillRect(0, 0, W, H);
+  const id = sel.value; const t = TARGETS.find((x) => x[0] === id); const part = t && t[2];
+  const pat = pc.createPattern(tile, 'repeat'); const zoom = +$('zoom').value;
+  const sz = 150 * zoom; // im Spiel wiederholt sich die Textur alle 150 px
+  if (!part) {
+    const wall = id.startsWith('wall');
+    pc.save(); pc.translate(0, wall ? 0 : H * 0.55);
+    const k = (sz / 256) * (W / 600);
+    pc.scale(k, k); pc.fillStyle = pat; pc.fillRect(0, 0, W / k, (wall ? H : H * 0.45) / k); pc.restore();
+    return;
+  }
+  const o = OUT[part]; const xs = o.map((p) => p[0]), ys = o.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const k = Math.min(W / (maxX - minX), H / (maxY - minY)) * 0.9;
+  pc.save();
+  pc.translate(W / 2 - ((minX + maxX) / 2) * k, H / 2 - ((minY + maxY) / 2) * k); pc.scale(k, k);
+  pc.beginPath(); o.forEach(([x, y], i) => i ? pc.lineTo(x, y) : pc.moveTo(x, y)); pc.closePath();
+  pc.save(); pc.clip();
+  const q = sz / 256; pc.scale(q, q); pc.fillStyle = pat; pc.fillRect(minX / q - 400, minY / q - 400, (maxX - minX) / q + 800, (maxY - minY) / q + 800); pc.restore();
+  pc.strokeStyle = '#000'; pc.lineWidth = 2 / k; pc.stroke();
+  pc.restore();
+}
+
+function dataUrl() { return tile.toDataURL('image/png'); }
+$('apply').onclick = () => {
+  if (!img) return;
+  const msg = { zdTex: true, name: sel.value, dataUrl: dataUrl() };
+  if (EMB) window.parent.postMessage(msg, '*');
+  else { try { localStorage.setItem('zd_tex_' + sel.value, msg.dataUrl); } catch (e) {} alert('Gespeichert (nur in diesem Browser). Für die App „Als PNG“ nutzen und die Datei in public/textures/ legen.'); }
+};
+$('save').onclick = () => { if (!img) return; const a = document.createElement('a'); a.href = dataUrl(); a.download = sel.value + '.png'; document.body.appendChild(a); a.click(); a.remove(); };
+$('reset').onclick = () => { if (EMB) window.parent.postMessage({ zdTex: true, name: sel.value, dataUrl: null }, '*'); else { try { localStorage.removeItem('zd_tex_' + sel.value); } catch (e) {} } };
+$('close').onclick = () => window.parent.postMessage({ zdTex: 'close' }, '*');
+layout(); build();
+</script>
+</body>
+</html>

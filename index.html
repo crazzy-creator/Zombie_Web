@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-fullscreen" />
+    <meta name="apple-mobile-web-app-title" content="Zombie" />
+    <title>Zombie Dismemberment</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; }
+      body { display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; font-family: system-ui, sans-serif; }
+      #stage { position: relative; }
+      #stage canvas { display: block; }
+      #bgc, #glc { position: absolute; left: 0; top: 0; pointer-events: none; }
+      #game { position: relative; touch-action: none; }
+      #bar { position: fixed; left: 0; right: 0; top: max(4px, env(safe-area-inset-top)); display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; padding: 0 6px; scrollbar-width: none; z-index: 4; pointer-events: none; }
+      #bar::-webkit-scrollbar { display: none; }
+      #bar::before, #bar::after { content: ''; margin: auto; }
+      #bar button { pointer-events: auto; flex: 0 0 auto; white-space: nowrap; background: rgba(15,12,12,0.78); color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 6px 9px; font-size: 12.5px; touch-action: manipulation; }
+      #bar button.on { background: #7a1318; color: #fff; border-color: #c4373e; }
+      #bar .sep { flex: 0 0 6px; }
+      .pop { position: fixed; top: 44px; left: 50%; transform: translateX(-50%); background: rgba(18,14,14,0.94); border: 1px solid #5a4646; border-radius: 12px; padding: 12px 16px; color: #e6dcdc; display: none; z-index: 5; box-shadow: 0 6px 24px rgba(0,0,0,0.6); }
+      .pop { box-sizing: border-box; }
+      .pop.open { display: block; }
+      #slowpop { min-width: 260px; }
+      #bloodpop { min-width: 260px; max-width: 86vw; }
+      #bloodpop h3 { margin: 0 0 8px; font-size: 16px; }
+      #bloodpop .tog { display: block; width: 100%; text-align: left; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+      #bloodpop .tog.sel { background: #7a1318; border-color: #c4373e; color: #fff; }
+      #bloodpop .row { margin: 12px 0 4px; font-size: 13px; color: #b8a8a8; }
+      #bloodpop .opts { display: flex; gap: 8px; flex-wrap: wrap; }
+      #bloodpop .sw { width: 34px; height: 34px; padding: 0; border-radius: 50%; border: 2px solid #4a4040; }
+      #bloodpop .sw.sel { border-color: #fff; box-shadow: 0 0 0 2px #888; }
+      #bloodpop input[type=range] { width: 100%; accent-color: #c4373e; }
+      #bloodpop .off { opacity: 0.35; pointer-events: none; }
+      #bloodpop .msg { margin-top: 10px; font-size: 13px; color: #f0c4c4; }
+      #bloodpop .done { margin-top: 12px; width: 100%; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 8px; font-size: 14px; }
+      #pwmodal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 20; align-items: center; justify-content: center; }
+      #pwmodal.open { display: flex; }
+      #pwmodal .box { background: #181212; border: 1px solid #5a4646; border-radius: 12px; padding: 16px; width: min(340px, 86vw); color: #e6dcdc; }
+      #pwmodal h3 { margin: 0 0 8px; font-size: 16px; }
+      #pwmodal .hint { font-size: 13px; color: #b8a8a8; margin-bottom: 10px; }
+      #pwmodal input { display: block; width: 100%; box-sizing: border-box; margin: 6px 0; padding: 10px; font-size: 16px; background: #2a2222; color: #fff; border: 1px solid #4a4040; border-radius: 8px; }
+      #pwmodal .err { min-height: 18px; color: #ff8a8a; font-size: 13px; }
+      #pwmodal .btns { display: flex; gap: 8px; margin-top: 8px; }
+      #pwmodal .btns button { flex: 1; padding: 10px; font-size: 14px; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; }
+      #pwmodal .btns button.sel { background: #7a1318; border-color: #c4373e; color: #fff; }
+      #envpop { min-width: 260px; max-width: 90vw; max-height: 80vh; overflow-y: auto; }
+      #envpop h3 { margin: 0 0 6px; font-size: 16px; }
+      #envpop .row { margin: 10px 0 4px; font-size: 13px; color: #b8a8a8; }
+      #envpop .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+      #envpop button { background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+      #envpop button.sel { background: #7a1318; border-color: #c4373e; color: #fff; }
+      #texframe { display: none; position: fixed; inset: 0; z-index: 30; background: #141010; }
+      #texframe.open { display: block; }
+      #texframe iframe { width: 100%; height: 100%; border: 0; }
+      #arenapop { min-width: 220px; }
+      #arenapop h3 { margin: 0 0 8px; font-size: 16px; }
+      #arenapop button { display: block; width: 100%; margin: 6px 0; text-align: left; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+      #arenapop button.sel { background: #7a1318; border-color: #c4373e; color: #fff; }
+      #launch { position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: 18px; width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #e8a23a, #8a5212); color: #fff; border: 3px solid #3b2308; font-size: 15px; font-weight: 700; line-height: 1.2; display: none; z-index: 4; touch-action: none; box-shadow: 0 4px 14px rgba(0,0,0,0.6); }
+      #launch small { font-size: 10px; font-weight: 400; }
+      #launch:active { transform: scale(0.95); filter: brightness(1.2); }
+      #figpop { min-width: 220px; }
+      #figpop h3 { margin: 0 0 8px; font-size: 16px; }
+      #figpop button { display: block; width: 100%; margin: 6px 0; text-align: left; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+      #figpop button.sel { background: #7a1318; border-color: #c4373e; color: #fff; }
+      #campanel { top: auto; bottom: 10px; max-width: 80vw; font-size: 13px; text-align: center; }
+      #campanel button { margin-top: 8px; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 6px 12px; }
+      #tools { position: fixed; left: max(4px, env(safe-area-inset-left)); top: 44px; display: flex; flex-direction: column; gap: 4px; z-index: 4; max-height: calc(100vh - 52px); overflow-y: auto; scrollbar-width: none; }
+      #tools::-webkit-scrollbar { display: none; }
+      #tools button { background: rgba(15,12,12,0.78); color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 6px 9px; font-size: 12.5px; text-align: left; touch-action: manipulation; white-space: nowrap; }
+      #tools button.on { background: #7a1318; color: #fff; border-color: #c4373e; }
+      #fire { position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: 18px; width: 92px; height: 92px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #e0454c, #8a1218); color: #fff; border: 3px solid #3b0a0d; font-size: 16px; font-weight: 700; letter-spacing: 1px; display: none; z-index: 4; touch-action: none; box-shadow: 0 4px 14px rgba(0,0,0,0.6); }
+      #fire:active { transform: scale(0.95); filter: brightness(1.2); }
+      #slowpop input { width: 100%; margin: 10px 0 2px; accent-color: #c4373e; }
+      #slowpop .val { font-size: 15px; text-align: center; }
+      #shop { width: min(560px, 92vw); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding-right: 10px; box-sizing: border-box; }
+      #shop::-webkit-scrollbar { width: 12px; }
+      #shop::-webkit-scrollbar-track { background: #2a2222; border-radius: 6px; }
+      #shop::-webkit-scrollbar-thumb { background: #c4373e; border-radius: 6px; border: 2px solid #2a2222; }
+      #shop h3 { margin: 0 0 8px; font-size: 16px; }
+      #shop .row { margin: 10px 0 4px; font-size: 13px; color: #b8a8a8; }
+      #shop .opts { display: flex; gap: 6px; flex-wrap: wrap; }
+      #shop button { background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+      #shop button.sel { background: #7a1318; border-color: #c4373e; color: #fff; }
+      #shop .sw { width: 34px; height: 34px; padding: 0; border-radius: 50%; border: 2px solid #4a4040; }
+      #shop .sw.sel { border-color: #fff; box-shadow: 0 0 0 2px #c4373e; }
+      #shoptrack { position: fixed; width: 10px; border-radius: 5px; background: rgba(255,255,255,0.12); z-index: 6; display: none; touch-action: none; }
+      #shopthumb { position: absolute; left: 0; right: 0; border-radius: 5px; background: #c4373e; }
+      #shop .done { margin-top: 14px; width: 100%; position: sticky; bottom: 0; }
+    </style>
+    <script type="module" crossorigin src="./assets/index-DJGeX3A_.js"></script>
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="bgc"></canvas>
+      <canvas id="glc"></canvas>
+      <canvas id="game"></canvas>
+    </div>
+    <div id="tools">
+      <button data-tool="hand" class="on">Hand</button>
+      <button data-tool="tweezers">Pinzette</button>
+      <button data-tool="knife">Messer</button>
+      <button data-tool="axe">Beil</button>
+      <button data-tool="hammer">Hammer</button>
+      <button data-tool="hook">Haken</button>
+      <button data-tool="pistol">Pistole</button>
+      <button data-tool="shotgun">Schrot</button>
+      <button data-tool="bow">Bogen</button>
+    </div>
+    <button id="fire">FEUER</button>
+    <button id="launch">KATAPULT<br><small>halten &amp; loslassen</small></button>
+    <div id="bar">
+      <button id="zin">＋</button>
+      <button id="zout">−</button>
+      <button id="cam">Kamera</button>
+      <button id="xray">Röntgen</button>
+      <button id="slow">Zeitlupe</button>
+      <button id="bloodbtn">Blut</button>
+      <button id="arenabtn">Arena</button>
+      <button id="envbtn">Umgebung</button>
+      <button id="texbtn">Texturen</button>
+      <button id="figbtn">Figur</button>
+      <button id="shopbtn">Kleidung</button>
+      <button id="clean">Blut weg</button>
+      <button id="reset">Neu</button>
+    </div>
+    <div id="campanel" class="pop">
+      <div>Kamera: 1 Finger verschieben, 2 Finger zoomen, Körperteil/Ort antippen = Ziel folgen.</div>
+      <button id="camclear">Ziel lösen</button>
+    </div>
+    <div id="slowpop" class="pop">
+      <div class="val"><span id="slowval">1,00</span>× Geschwindigkeit</div>
+      <input id="slowrange" type="range" min="0.1" max="1" step="0.05" value="1" />
+    </div>
+    <div id="bloodpop" class="pop"></div>
+    <div id="pwmodal"></div>
+    <div id="arenapop" class="pop"></div>
+    <div id="envpop" class="pop"></div>
+    <div id="texframe"><iframe id="texiframe" title="Texturen-Editor"></iframe></div>
+    <div id="figpop" class="pop"></div>
+    <div id="shop" class="pop"></div>
+    <div id="shoptrack"><div id="shopthumb"></div></div>
+  </body>
+</html>
