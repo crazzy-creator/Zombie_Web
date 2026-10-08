@@ -35,7 +35,12 @@
   <main>
     <div class="col">
       <div class="box"><canvas id="src"></canvas></div>
-      <div class="row">
+      <div class="row" id="fitRow" style="display:none">
+        <button id="fitReset">Form zurücksetzen</button>
+        <label>Größe <input id="fitScale" type="range" min="0.3" max="2.2" step="0.01" value="1"></label>
+        <span class="hint">Ziehe die weißen Punkte an den Rand deines Bildteils. Ziehst du innerhalb der Form, verschiebst du sie ganz.</span>
+      </div>
+      <div class="row" id="polyRow">
         <button id="polyClose">Polygon schließen</button>
         <button id="polyUndo">Punkt zurück</button>
         <button id="polyClear">Auswahl löschen</button>
@@ -52,6 +57,7 @@
       <div class="row">
         <label><input id="seamless" type="checkbox" checked> Nahtlos machen</label>
         <label><input id="rot" type="checkbox"> 90° drehen</label>
+        <label id="fitLbl" style="display:none"><input id="fitOn" type="checkbox"> Form anpassen (Körperteil)</label>
         <span class="hint" id="info"></span>
       </div>
     </div>
@@ -89,6 +95,59 @@ let tile = document.createElement('canvas'); tile.width = tile.height = 256;
 const src = $('src'), prev = $('prev');
 const sc = src.getContext('2d'), pc = prev.getContext('2d');
 
+// ---- Modus „Form anpassen“: Umriss des Körperteils über das Bild legen, Punkte verschieben, Bild wird auf die Form verzerrt ----
+const fitStates = {};   // je Ziel: { pts: [[x,y]...], scale }
+let fitCv = null;       // fertige Form-Textur
+let fitBox = null;      // [minX,minY,maxX,maxY] der Körperteil-Form (Spielkoordinaten)
+let drag = null;
+const partOf = () => { const t = TARGETS.find((x) => x[0] === sel.value); return t && t[2]; };
+const isFit = () => !!partOf() && $('fitOn').checked && !!img;
+function bboxOf(o) { const xs = o.map((p) => p[0]), ys = o.map((p) => p[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; }
+function fitState() {
+  const id = sel.value; if (fitStates[id]) return fitStates[id];
+  const o = OUT[partOf()], b = bboxOf(o);
+  const k = Math.min(img.width / (b[2] - b[0]), img.height / (b[3] - b[1])) * 0.8;
+  const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  return (fitStates[id] = { pts: o.map(([x, y]) => [img.width / 2 + (x - cx) * k, img.height / 2 + (y - cy) * k]), scale: 1 });
+}
+function centroid(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
+/** Affine Abbildung, die Dreieck s auf Dreieck d abbildet (Canvas-Matrix a,b,c,d,e,f) */
+function affine(s, d) {
+  const [x0, y0] = s[0], [x1, y1] = s[1], [x2, y2] = s[2];
+  const det = x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1); if (Math.abs(det) < 1e-6) return null;
+  const sol = (u0, u1, u2) => [(u0 * (y1 - y2) + u1 * (y2 - y0) + u2 * (y0 - y1)) / det, (u0 * (x2 - x1) + u1 * (x0 - x2) + u2 * (x1 - x0)) / det, (u0 * (x1 * y2 - x2 * y1) + u1 * (x2 * y0 - x0 * y2) + u2 * (x0 * y1 - x1 * y0)) / det];
+  const [a, c, e] = sol(d[0][0], d[1][0], d[2][0]); const [b, dd, f] = sol(d[0][1], d[1][1], d[2][1]);
+  return [a, b, c, dd, e, f];
+}
+function buildFit() {
+  const part = partOf(), o = OUT[part], b = bboxOf(o), st = fitState();
+  fitBox = b; const bw = b[2] - b[0], bh = b[3] - b[1];
+  const FW = bw >= bh ? 512 : Math.round(512 * bw / bh), FH = bw >= bh ? Math.round(512 * bh / bw) : 512;
+  const cv = document.createElement('canvas'); cv.width = Math.max(32, FW); cv.height = Math.max(32, FH); const c = cv.getContext('2d');
+  c.fillStyle = averageColor(false); c.fillRect(0, 0, cv.width, cv.height);
+  c.filter = `brightness(${$('bright').value}) saturate(${$('sat').value})`;
+  const toD = ([x, y]) => [(x - b[0]) / bw * cv.width, (y - b[1]) / bh * cv.height];
+  const cs = centroid(st.pts), cd = toD(centroid(o)), n = o.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const S = [cs, st.pts[i], st.pts[j]], D = [cd, toD(o[i]), toD(o[j])];
+    const m = affine(S, D); if (!m) continue;
+    // Dreieck leicht aufweiten, damit keine Nähte entstehen
+    const ex = D.map((q) => [cd[0] + (q[0] - cd[0]) * 1.02, cd[1] + (q[1] - cd[1]) * 1.02]);
+    c.save(); c.beginPath(); ex.forEach(([x, y], k) => k ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.clip();
+    c.setTransform(...m); c.drawImage(img, 0, 0); c.restore();
+  }
+  fitCv = cv;
+  $('info').textContent = `Form-Textur ${cv.width}×${cv.height} · Quelle ${img.width}×${img.height}`;
+}
+function refreshMode() {
+  const part = partOf();
+  $('fitLbl').style.display = part ? '' : 'none';
+  const on = isFit();
+  $('fitRow').style.display = on ? '' : 'none'; $('polyRow').style.display = on ? 'none' : '';
+  if (on) $('fitScale').value = fitState().scale;
+}
+
 function fit(c) { const r = c.getBoundingClientRect(); const d = window.devicePixelRatio || 1; c.width = Math.max(10, Math.round(r.width * d)); c.height = Math.max(10, Math.round(r.height * d)); }
 let view = { s: 1, ox: 0, oy: 0 };
 function layout() {
@@ -103,6 +162,13 @@ function drawSrc() {
   sc.fillStyle = '#0c0909'; sc.fillRect(0, 0, src.width, src.height);
   if (!img) { sc.fillStyle = '#6a5a5a'; sc.font = `${16 * (window.devicePixelRatio || 1)}px system-ui`; sc.textAlign = 'center'; sc.fillText('„Bild laden“ wählen', src.width / 2, src.height / 2); return; }
   sc.drawImage(img, view.ox, view.oy, img.width * view.s, img.height * view.s);
+  if (isFit()) {
+    const st = fitState(), dpr = window.devicePixelRatio || 1;
+    sc.beginPath(); st.pts.forEach(([x, y], i) => { const px = view.ox + x * view.s, py = view.oy + y * view.s; i ? sc.lineTo(px, py) : sc.moveTo(px, py); }); sc.closePath();
+    sc.fillStyle = 'rgba(255,60,60,0.15)'; sc.fill(); sc.strokeStyle = '#ff5050'; sc.lineWidth = 2 * dpr; sc.stroke();
+    for (const [x, y] of st.pts) { sc.beginPath(); sc.arc(view.ox + x * view.s, view.oy + y * view.s, 5 * dpr, 0, 6.3); sc.fillStyle = '#fff'; sc.fill(); sc.strokeStyle = '#a00'; sc.lineWidth = dpr; sc.stroke(); }
+    return;
+  }
   if (poly.length) {
     sc.beginPath();
     poly.forEach(([x, y], i) => { const px = view.ox + x * view.s, py = view.oy + y * view.s; i ? sc.lineTo(px, py) : sc.moveTo(px, py); });
@@ -113,8 +179,25 @@ function drawSrc() {
   }
 }
 
+function imgPos(e) { const r = src.getBoundingClientRect(); const d = src.width / r.width; return [((e.clientX - r.left) * d - view.ox) / view.s, ((e.clientY - r.top) * d - view.oy) / view.s]; }
 src.addEventListener('pointerdown', (e) => {
-  if (!img || closed) return;
+  if (!isFit()) return;
+  const [x, y] = imgPos(e), st = fitState(), dpr = window.devicePixelRatio || 1;
+  let bi = -1, bd = 22 * dpr / view.s;
+  st.pts.forEach((q, i) => { const dd = Math.hypot(q[0] - x, q[1] - y); if (dd < bd) { bd = dd; bi = i; } });
+  if (bi >= 0) drag = { i: bi }; else drag = { all: true, x, y, orig: st.pts.map((q) => q.slice()) };
+  src.setPointerCapture(e.pointerId); e.preventDefault();
+});
+src.addEventListener('pointermove', (e) => {
+  if (!drag || !isFit()) return;
+  const [x, y] = imgPos(e), st = fitState();
+  if (drag.all) st.pts.forEach((q, i) => { q[0] = drag.orig[i][0] + x - drag.x; q[1] = drag.orig[i][1] + y - drag.y; });
+  else { st.pts[drag.i][0] = x; st.pts[drag.i][1] = y; }
+  build();
+});
+src.addEventListener('pointerup', () => { drag = null; });
+src.addEventListener('pointerdown', (e) => {
+  if (isFit() || !img || closed) return;
   const r = src.getBoundingClientRect(); const d = src.width / r.width;
   const x = ((e.clientX - r.left) * d - view.ox) / view.s, y = ((e.clientY - r.top) * d - view.oy) / view.s;
   if (x < 0 || y < 0 || x > img.width || y > img.height) return;
@@ -128,7 +211,7 @@ $('polyClear').onclick = () => { poly = []; closed = false; build(); };
 $('file').onchange = (e) => loadFile(e.target.files[0]);
 function loadFile(f) {
   if (!f) return; const url = URL.createObjectURL(f); const im = new Image();
-  im.onload = () => { img = im; poly = []; closed = false; layout(); build(); };
+  im.onload = () => { img = im; poly = []; closed = false; for (const k in fitStates) delete fitStates[k]; refreshMode(); layout(); build(); };
   im.src = url;
 }
 document.addEventListener('dragover', (e) => e.preventDefault());
@@ -138,6 +221,7 @@ document.addEventListener('drop', (e) => { e.preventDefault(); loadFile(e.dataTr
 function build() {
   const c = tile.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, 256, 256);
   if (!img) { drawSrc(); drawPrev(); return; }
+  if (isFit()) { buildFit(); drawSrc(); drawPrev(); return; }
   let minX = 0, minY = 0, maxX = img.width, maxY = img.height;
   const use = closed && poly.length > 2;
   if (use) { minX = Math.min(...poly.map((p) => p[0])); maxX = Math.max(...poly.map((p) => p[0])); minY = Math.min(...poly.map((p) => p[1])); maxY = Math.max(...poly.map((p) => p[1])); }
@@ -183,7 +267,10 @@ function makeSeamless(c) {
   c.drawImage(sh, 0, 0);
 }
 ['bright', 'sat', 'zoom', 'seamless', 'rot'].forEach((id) => $(id).addEventListener('input', build));
-sel.addEventListener('change', drawPrev);
+sel.addEventListener('change', () => { refreshMode(); build(); });
+$('fitOn').addEventListener('change', () => { refreshMode(); build(); });
+$('fitReset').onclick = () => { delete fitStates[sel.value]; refreshMode(); build(); };
+$('fitScale').addEventListener('input', () => { const st = fitState(), k = +$('fitScale').value / st.scale, c = centroid(st.pts); st.pts.forEach((q) => { q[0] = c[0] + (q[0] - c[0]) * k; q[1] = c[1] + (q[1] - c[1]) * k; }); st.scale = +$('fitScale').value; build(); });
 
 function drawPrev() {
   const W = prev.width, H = prev.height; pc.setTransform(1, 0, 0, 1, 0, 0);
@@ -199,28 +286,32 @@ function drawPrev() {
     return;
   }
   const o = OUT[part]; const xs = o.map((p) => p[0]), ys = o.map((p) => p[1]);
+  const fitOn = isFit() && fitCv;
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
   const k = Math.min(W / (maxX - minX), H / (maxY - minY)) * 0.9;
   pc.save();
   pc.translate(W / 2 - ((minX + maxX) / 2) * k, H / 2 - ((minY + maxY) / 2) * k); pc.scale(k, k);
   pc.beginPath(); o.forEach(([x, y], i) => i ? pc.lineTo(x, y) : pc.moveTo(x, y)); pc.closePath();
   pc.save(); pc.clip();
-  const q = sz / 256; pc.scale(q, q); pc.fillStyle = pat; pc.fillRect(minX / q - 400, minY / q - 400, (maxX - minX) / q + 800, (maxY - minY) / q + 800); pc.restore();
+  if (fitOn) pc.drawImage(fitCv, fitBox[0], fitBox[1], fitBox[2] - fitBox[0], fitBox[3] - fitBox[1]);
+  else { const q = sz / 256; pc.scale(q, q); pc.fillStyle = pat; pc.fillRect(minX / q - 400, minY / q - 400, (maxX - minX) / q + 800, (maxY - minY) / q + 800); }
+  pc.restore();
   pc.strokeStyle = '#000'; pc.lineWidth = 2 / k; pc.stroke();
   pc.restore();
 }
 
-function dataUrl() { return tile.toDataURL('image/png'); }
+function dataUrl() { return (isFit() && fitCv ? fitCv : tile).toDataURL('image/png'); }
 $('apply').onclick = () => {
   if (!img) return;
   const msg = { zdTex: true, name: sel.value, dataUrl: dataUrl() };
+  if (isFit()) msg.fit = fitBox;
   if (EMB) window.parent.postMessage(msg, '*');
-  else { try { localStorage.setItem('zd_tex_' + sel.value, msg.dataUrl); } catch (e) {} alert('Gespeichert (nur in diesem Browser). Für die App „Als PNG“ nutzen und die Datei in public/textures/ legen.'); }
+  else { try { localStorage.setItem('zd_tex_' + sel.value, msg.dataUrl); if (msg.fit) localStorage.setItem('zd_texfit_' + sel.value, JSON.stringify(msg.fit)); else localStorage.removeItem('zd_texfit_' + sel.value); } catch (e) {} alert('Gespeichert (nur in diesem Browser). Für die App „Als PNG“ nutzen und die Datei in public/textures/ legen.'); }
 };
 $('save').onclick = () => { if (!img) return; const a = document.createElement('a'); a.href = dataUrl(); a.download = sel.value + '.png'; document.body.appendChild(a); a.click(); a.remove(); };
 $('reset').onclick = () => { if (EMB) window.parent.postMessage({ zdTex: true, name: sel.value, dataUrl: null }, '*'); else { try { localStorage.removeItem('zd_tex_' + sel.value); } catch (e) {} } };
 $('close').onclick = () => window.parent.postMessage({ zdTex: 'close' }, '*');
-layout(); build();
+refreshMode(); layout(); build();
 </script>
 </body>
 </html>
