@@ -65,6 +65,12 @@
       #launch { position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: 18px; width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #e8a23a, #8a5212); color: #fff; border: 3px solid #3b2308; font-size: 15px; font-weight: 700; line-height: 1.2; display: none; z-index: 4; touch-action: none; box-shadow: 0 4px 14px rgba(0,0,0,0.6); }
       #launch small { font-size: 10px; font-weight: 400; }
       #launch:active { transform: scale(0.95); filter: brightness(1.2); }
+      #ver { position: fixed; left: max(6px, env(safe-area-inset-left)); bottom: 4px; font-size: 11px; color: rgba(255,255,255,0.35); z-index: 3; pointer-events: none; }
+      #addpop { min-width: 240px; }
+      #addpop h3 { margin: 0 0 8px; font-size: 16px; }
+      #addpop button { display: block; width: 100%; margin: 6px 0; text-align: left; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+      #addpop .warn { margin-top: 12px; background: #3a1a1a; border-color: #7a3030; }
+      #addpop .hint { font-size: 12px; color: #a89898; margin: 8px 0 0; }
       #figpop { min-width: 220px; }
       #figpop h3 { margin: 0 0 8px; font-size: 16px; }
       #figpop button { display: block; width: 100%; margin: 6px 0; text-align: left; background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
@@ -94,7 +100,7 @@
       #shopthumb { position: absolute; left: 0; right: 0; border-radius: 5px; background: #c4373e; }
       #shop .done { margin-top: 14px; width: 100%; position: sticky; bottom: 0; }
     </style>
-    <script type="module" crossorigin src="./assets/index-DJGeX3A_.js"></script>
+    <script type="module" crossorigin src="./assets/index-BYAPYdai.js"></script>
   </head>
   <body>
     <div id="stage">
@@ -109,10 +115,16 @@
       <button data-tool="axe">Beil</button>
       <button data-tool="hammer">Hammer</button>
       <button data-tool="hook">Haken</button>
+      <button data-tool="dynamite">Dynamit</button>
+      <button data-tool="stone">Stein</button>
+      <button data-tool="crate">Kiste</button>
+      <button data-tool="barrel">Fass</button>
+      <button id="sticky" style="display:none">Klebend: AUS</button>
       <button data-tool="pistol">Pistole</button>
       <button data-tool="shotgun">Schrot</button>
       <button data-tool="bow">Bogen</button>
     </div>
+    <div id="ver"></div>
     <button id="fire">FEUER</button>
     <button id="launch">KATAPULT<br><small>halten &amp; loslassen</small></button>
     <div id="bar">
@@ -128,7 +140,7 @@
       <button id="figbtn">Figur</button>
       <button id="shopbtn">Kleidung</button>
       <button id="clean">Blut weg</button>
-      <button id="reset">Neu</button>
+      <button id="addbtn">Hinzufügen</button>
     </div>
     <div id="campanel" class="pop">
       <div>Kamera: 1 Finger verschieben, 2 Finger zoomen, Körperteil/Ort antippen = Ziel folgen.</div>
@@ -144,6 +156,7 @@
     <div id="envpop" class="pop"></div>
     <div id="texframe"><iframe id="texiframe" title="Texturen-Editor"></iframe></div>
     <div id="figpop" class="pop"></div>
+    <div id="addpop" class="pop"></div>
     <div id="shop" class="pop"></div>
     <div id="shoptrack"><div id="shopthumb"></div></div>
   </body>
