@@ -36,9 +36,10 @@
     <div class="col">
       <div class="box"><canvas id="src"></canvas></div>
       <div class="row" id="fitRow" style="display:none">
+        <button id="fitAuto">Automatisch: Körperteil antippen</button>
         <button id="fitReset">Form zurücksetzen</button>
         <label>Größe <input id="fitScale" type="range" min="0.3" max="2.2" step="0.01" value="1"></label>
-        <span class="hint">Ziehe die weißen Punkte an den Rand deines Bildteils. Ziehst du innerhalb der Form, verschiebst du sie ganz.</span>
+        <span class="hint">Weiße Punkte ziehen. Auf die Linie tippen = Punkt hinzufügen, Doppeltipp auf Punkt = löschen. Innen ziehen = ganze Form verschieben.</span>
       </div>
       <div class="row" id="polyRow">
         <button id="polyClose">Polygon schließen</button>
@@ -108,38 +109,106 @@ function fitState() {
   const o = OUT[partOf()], b = bboxOf(o);
   const k = Math.min(img.width / (b[2] - b[0]), img.height / (b[3] - b[1])) * 0.8;
   const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
-  return (fitStates[id] = { pts: o.map(([x, y]) => [img.width / 2 + (x - cx) * k, img.height / 2 + (y - cy) * k]), scale: 1 });
+  return (fitStates[id] = { pts: o.map(([x, y]) => [img.width / 2 + (x - cx) * k, img.height / 2 + (y - cy) * k]), dst: o.map((q) => q.slice()), scale: 1 });
 }
 function centroid(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
-/** Affine Abbildung, die Dreieck s auf Dreieck d abbildet (Canvas-Matrix a,b,c,d,e,f) */
-function affine(s, d) {
-  const [x0, y0] = s[0], [x1, y1] = s[1], [x2, y2] = s[2];
-  const det = x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1); if (Math.abs(det) < 1e-6) return null;
-  const sol = (u0, u1, u2) => [(u0 * (y1 - y2) + u1 * (y2 - y0) + u2 * (y0 - y1)) / det, (u0 * (x2 - x1) + u1 * (x0 - x2) + u2 * (x1 - x0)) / det, (u0 * (x1 * y2 - x2 * y1) + u1 * (x2 * y0 - x0 * y2) + u2 * (x0 * y1 - x1 * y0)) / det];
-  const [a, c, e] = sol(d[0][0], d[1][0], d[2][0]); const [b, dd, f] = sol(d[0][1], d[1][1], d[2][1]);
-  return [a, b, c, dd, e, f];
+let srcData = null;
+function ensureSrcData() {
+  if (srcData && srcData.img === img) return srcData;
+  const k = Math.min(1, 3000 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return (srcData = { img, k, w: c.width, h: c.height, d: c.getContext('2d').getImageData(0, 0, c.width, c.height).data });
 }
-function buildFit() {
+const pot = (n) => Math.max(32, Math.min(1024, 2 ** Math.round(Math.log2(Math.max(1, n)))));
+/** Glatte Verzerrung: Ziel-Punkt -> Quell-Punkt = Grundabbildung (Rahmen auf Rahmen) + gewichtete Abweichungen der Randpunkte (Shepard) */
+function buildFit(fast) {
   const part = partOf(), o = OUT[part], b = bboxOf(o), st = fitState();
   fitBox = b; const bw = b[2] - b[0], bh = b[3] - b[1];
-  const FW = bw >= bh ? 512 : Math.round(512 * bw / bh), FH = bw >= bh ? Math.round(512 * bh / bw) : 512;
-  const cv = document.createElement('canvas'); cv.width = Math.max(32, FW); cv.height = Math.max(32, FH); const c = cv.getContext('2d');
-  c.fillStyle = averageColor(false); c.fillRect(0, 0, cv.width, cv.height);
-  c.filter = `brightness(${$('bright').value}) saturate(${$('sat').value})`;
-  const toD = ([x, y]) => [(x - b[0]) / bw * cv.width, (y - b[1]) / bh * cv.height];
-  const cs = centroid(st.pts), cd = toD(centroid(o)), n = o.length;
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const S = [cs, st.pts[i], st.pts[j]], D = [cd, toD(o[i]), toD(o[j])];
-    const m = affine(S, D); if (!m) continue;
-    // Dreieck leicht aufweiten, damit keine Nähte entstehen
-    const ex = D.map((q) => [cd[0] + (q[0] - cd[0]) * 1.02, cd[1] + (q[1] - cd[1]) * 1.02]);
-    c.save(); c.beginPath(); ex.forEach(([x, y], k) => k ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.clip();
-    c.setTransform(...m); c.drawImage(img, 0, 0); c.restore();
+  const q = fast ? 2 : 4;
+  const TW = pot(bw * q), TH = pot(bh * q);
+  const sd = ensureSrcData();
+  const sb = bboxOf(st.pts), db = bboxOf(st.dst);
+  const kx = (sb[2] - sb[0]) / (db[2] - db[0]), ky = (sb[3] - sb[1]) / (db[3] - db[1]);
+  const base = (x, y) => [sb[0] + (x - db[0]) * kx, sb[1] + (y - db[1]) * ky];
+  const N = st.pts.length, res = new Float64Array(N * 2);
+  for (let i = 0; i < N; i++) { const [bx, by] = base(st.dst[i][0], st.dst[i][1]); res[2 * i] = st.pts[i][0] - bx; res[2 * i + 1] = st.pts[i][1] - by; }
+  const cv = document.createElement('canvas'); cv.width = TW; cv.height = TH; const c = cv.getContext('2d');
+  const out = c.createImageData(TW, TH), od = out.data, sdd = sd.d, K = sd.k;
+  const dx = st.dst.map((p) => p[0]), dy = st.dst.map((p) => p[1]);
+  for (let j = 0; j < TH; j++) for (let i = 0; i < TW; i++) {
+    const x = b[0] + (i + 0.5) / TW * bw, y = b[1] + (j + 0.5) / TH * bh;
+    let sw = 0, rx = 0, ry = 0;
+    for (let n = 0; n < N; n++) { const ex = x - dx[n], ey = y - dy[n]; const w = 1 / (ex * ex + ey * ey + 4); sw += w; rx += w * res[2 * n]; ry += w * res[2 * n + 1]; }
+    const bp = base(x, y); let sx = (bp[0] + rx / sw) * K - 0.5, sy = (bp[1] + ry / sw) * K - 0.5;
+    sx = Math.min(sd.w - 1.001, Math.max(0, sx)); sy = Math.min(sd.h - 1.001, Math.max(0, sy));
+    const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0, i00 = (y0 * sd.w + x0) * 4, i10 = i00 + 4, i01 = i00 + sd.w * 4, i11 = i01 + 4;
+    const o4 = (j * TW + i) * 4;
+    for (let ch = 0; ch < 3; ch++) od[o4 + ch] = sdd[i00 + ch] * (1 - fx) * (1 - fy) + sdd[i10 + ch] * fx * (1 - fy) + sdd[i01 + ch] * (1 - fx) * fy + sdd[i11 + ch] * fx * fy;
+    od[o4 + 3] = 255;
   }
-  fitCv = cv;
-  $('info').textContent = `Form-Textur ${cv.width}×${cv.height} · Quelle ${img.width}×${img.height}`;
+  c.putImageData(out, 0, 0);
+  // Helligkeit/Sättigung
+  const f = document.createElement('canvas'); f.width = TW; f.height = TH; const fc = f.getContext('2d');
+  fc.filter = `brightness(${$('bright').value}) saturate(${$('sat').value})`; fc.drawImage(cv, 0, 0);
+  fitCv = f;
+  $('info').textContent = `Form-Textur ${TW}×${TH} · Quelle ${img.width}×${img.height}`;
 }
+/** Automatik: Körperteil im Bild antippen, Umriss wird erkannt und die Punkte werden entlang der Silhouette gesetzt */
+function autoFit(px, py) {
+  const part = partOf(), o = OUT[part], st = fitState(), sd = ensureSrcData();
+  const W = sd.w, H = sd.h, d = sd.d;
+  // Hintergrund = Mittel der Bildränder
+  let br = 0, bg = 0, bb = 0, n = 0;
+  const addBg = (x, y) => { const i = (y * W + x) * 4; br += d[i]; bg += d[i + 1]; bb += d[i + 2]; n++; };
+  for (let x = 0; x < W; x += 4) { addBg(x, 0); addBg(x, H - 1); } for (let y = 0; y < H; y += 4) { addBg(0, y); addBg(W - 1, y); }
+  br /= n; bg /= n; bb /= n;
+  const fg = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) fg[i] = Math.max(Math.abs(d[i * 4] - br), Math.abs(d[i * 4 + 1] - bg), Math.abs(d[i * 4 + 2] - bb)) > 14 ? 1 : 0;
+  // Zusammenhängender Bereich ab Tippstelle (mit kleiner Lücken-Toleranz durch Suche der nächsten Vordergrundstelle)
+  let sx = Math.round(px * sd.k), sy = Math.round(py * sd.k), found = false;
+  for (let r = 0; r < 60 && !found; r++) for (let yy = sy - r; yy <= sy + r && !found; yy++) for (let xx = sx - r; xx <= sx + r; xx++) { if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue; if (fg[yy * W + xx]) { sx = xx; sy = yy; found = true; break; } }
+  if (!found) { $('info').textContent = 'Dort wurde kein Körperteil erkannt.'; return; }
+  const seen = new Uint8Array(W * H), stack = [sy * W + sx]; seen[sy * W + sx] = 1;
+  const lo = new Int32Array(H).fill(1e9), hi = new Int32Array(H).fill(-1);
+  while (stack.length) {
+    const p = stack.pop(), x = p % W, y = (p / W) | 0;
+    if (x < lo[y]) lo[y] = x; if (x > hi[y]) hi[y] = x;
+    for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + ax, ny = y + ay; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const q = ny * W + nx; if (fg[q] && !seen[q]) { seen[q] = 1; stack.push(q); } }
+  }
+  let y0 = 0, y1 = H - 1; while (hi[y0] < 0) y0++; while (hi[y1] < 0) y1--;
+  // glätten (gleitendes Mittel) und Lücken füllen
+  const L = [], R = [];
+  for (let y = y0; y <= y1; y++) { L.push(hi[y] < 0 ? NaN : lo[y]); R.push(hi[y] < 0 ? NaN : hi[y]); }
+  const fillnan = (a) => { for (let i = 0; i < a.length; i++) if (isNaN(a[i])) { let j = i; while (j < a.length && isNaN(a[j])) j++; const l = i ? a[i - 1] : a[j], r = j < a.length ? a[j] : l; for (let k = i; k < j; k++) a[k] = l + (r - l) * (k - i + 1) / (j - i + 1); i = j; } };
+  fillnan(L); fillnan(R);
+  const sm = (a, k) => a.map((_, i) => { let s = 0, m = 0; for (let j = Math.max(0, i - k); j <= Math.min(a.length - 1, i + k); j++) { s += a[j]; m++; } return s / m; });
+  const Ls = sm(L, 6), Rs = sm(R, 6);
+  // Ziel-Rahmen (Achse): Arme schräg, sonst senkrecht
+  let th = Math.PI / 2;
+  if (part.startsWith('arm')) { const c = centroid(o); let sxx = 0, sxy = 0, syy = 0; for (const [x, y] of o) { sxx += (x - c[0]) ** 2; sxy += (x - c[0]) * (y - c[1]); syy += (y - c[1]) ** 2; } const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy); let ux = Math.cos(ang), uy = Math.sin(ang); if (ux * (c[0] + 6) + uy * (c[1] + 116) < 0) { ux = -ux; uy = -uy; } th = Math.atan2(uy, ux); }
+  const u = [Math.cos(th), Math.sin(th)], w = [-Math.sin(th), Math.cos(th)];
+  const A = o.map(([x, y]) => x * u[0] + y * u[1]), S = o.map(([x, y]) => x * w[0] + y * w[1]);
+  const aMin = Math.min(...A), aMax = Math.max(...A);
+  // Ziel-Ausdehnung je a: aus dem Polygon abtasten
+  const bins = 120, dlo = new Array(bins).fill(1e9), dhi = new Array(bins).fill(-1e9);
+  for (let i = 0; i < o.length; i++) { const j = (i + 1) % o.length; for (let t = 0; t <= 1; t += 0.05) { const a = A[i] + (A[j] - A[i]) * t, sv = S[i] + (S[j] - S[i]) * t; const bi = Math.min(bins - 1, Math.max(0, Math.floor((a - aMin) / (aMax - aMin) * bins))); dlo[bi] = Math.min(dlo[bi], sv); dhi[bi] = Math.max(dhi[bi], sv); } }
+  fillnan(dlo.map((v) => v > 1e8 ? NaN : v)); // (nur zur Sicherheit)
+  const dl = dlo.map((v, i) => v > 1e8 ? (dlo[i - 1] ?? 0) : v), dh = dhi.map((v, i) => v < -1e8 ? (dhi[i - 1] ?? 0) : v);
+  st.pts = o.map((_, i) => {
+    const ta = (A[i] - aMin) / (aMax - aMin);
+    const bi = Math.min(bins - 1, Math.floor(ta * bins));
+    const t = Math.min(1, Math.max(0, (S[i] - dl[bi]) / Math.max(1e-3, dh[bi] - dl[bi])));
+    const row = Math.round(ta * (y1 - y0)); const r = Math.min(L.length - 1, row);
+    // s_quelle = -x: kleinstes s = rechter Rand
+    const x = Rs[r] - t * (Rs[r] - Ls[r]);
+    return [x / sd.k, (y0 + r) / sd.k];
+  });
+  st.dst = o.map((q) => q.slice());
+  st.scale = 1; $('fitScale').value = 1;
+  build();
+}
+let autoMode = false;
 function refreshMode() {
   const part = partOf();
   $('fitLbl').style.display = part ? '' : 'none';
@@ -183,19 +252,45 @@ function imgPos(e) { const r = src.getBoundingClientRect(); const d = src.width 
 src.addEventListener('pointerdown', (e) => {
   if (!isFit()) return;
   const [x, y] = imgPos(e), st = fitState(), dpr = window.devicePixelRatio || 1;
+  if (autoMode) { autoMode = false; $('fitAuto').classList.remove('sel'); autoFit(x, y); return; }
   let bi = -1, bd = 22 * dpr / view.s;
   st.pts.forEach((q, i) => { const dd = Math.hypot(q[0] - x, q[1] - y); if (dd < bd) { bd = dd; bi = i; } });
+  if (bi < 0) {
+    // Punkt auf einer Kante hinzufügen
+    let be = -1, bt = 0, bdist = 12 * dpr / view.s;
+    const n = st.pts.length;
+    for (let i = 0; i < n; i++) {
+      const a = st.pts[i], b = st.pts[(i + 1) % n], vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy || 1;
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / l2));
+      const dd = Math.hypot(a[0] + vx * t - x, a[1] + vy * t - y);
+      if (dd < bdist) { bdist = dd; be = i; bt = t; }
+    }
+    if (be >= 0) {
+      const a = st.pts[be], b = st.pts[(be + 1) % n], da = st.dst[be], db = st.dst[(be + 1) % n];
+      st.pts.splice(be + 1, 0, [a[0] + (b[0] - a[0]) * bt, a[1] + (b[1] - a[1]) * bt]);
+      st.dst.splice(be + 1, 0, [da[0] + (db[0] - da[0]) * bt, da[1] + (db[1] - da[1]) * bt]);
+      bi = be + 1;
+    }
+  }
   if (bi >= 0) drag = { i: bi }; else drag = { all: true, x, y, orig: st.pts.map((q) => q.slice()) };
-  src.setPointerCapture(e.pointerId); e.preventDefault();
+  src.setPointerCapture(e.pointerId); e.preventDefault(); build(true);
+});
+src.addEventListener('dblclick', (e) => {
+  if (!isFit()) return;
+  const [x, y] = imgPos(e), st = fitState(), dpr = window.devicePixelRatio || 1;
+  if (st.pts.length <= 6) return;
+  let bi = -1, bd = 22 * dpr / view.s;
+  st.pts.forEach((q, i) => { const dd = Math.hypot(q[0] - x, q[1] - y); if (dd < bd) { bd = dd; bi = i; } });
+  if (bi >= 0) { st.pts.splice(bi, 1); st.dst.splice(bi, 1); build(); }
 });
 src.addEventListener('pointermove', (e) => {
   if (!drag || !isFit()) return;
   const [x, y] = imgPos(e), st = fitState();
   if (drag.all) st.pts.forEach((q, i) => { q[0] = drag.orig[i][0] + x - drag.x; q[1] = drag.orig[i][1] + y - drag.y; });
   else { st.pts[drag.i][0] = x; st.pts[drag.i][1] = y; }
-  build();
+  build(true);
 });
-src.addEventListener('pointerup', () => { drag = null; });
+src.addEventListener('pointerup', () => { if (drag) { drag = null; build(); } });
 src.addEventListener('pointerdown', (e) => {
   if (isFit() || !img || closed) return;
   const r = src.getBoundingClientRect(); const d = src.width / r.width;
@@ -218,10 +313,10 @@ document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
 
 /** Kachel (256×256) aus dem Bild bzw. dem Polygonausschnitt erzeugen */
-function build() {
+function build(fast) {
   const c = tile.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, 256, 256);
   if (!img) { drawSrc(); drawPrev(); return; }
-  if (isFit()) { buildFit(); drawSrc(); drawPrev(); return; }
+  if (isFit()) { buildFit(fast); drawSrc(); drawPrev(); return; }
   let minX = 0, minY = 0, maxX = img.width, maxY = img.height;
   const use = closed && poly.length > 2;
   if (use) { minX = Math.min(...poly.map((p) => p[0])); maxX = Math.max(...poly.map((p) => p[0])); minY = Math.min(...poly.map((p) => p[1])); maxY = Math.max(...poly.map((p) => p[1])); }
@@ -269,6 +364,7 @@ function makeSeamless(c) {
 ['bright', 'sat', 'zoom', 'seamless', 'rot'].forEach((id) => $(id).addEventListener('input', build));
 sel.addEventListener('change', () => { refreshMode(); build(); });
 $('fitOn').addEventListener('change', () => { refreshMode(); build(); });
+$('fitAuto').onclick = () => { autoMode = !autoMode; $('fitAuto').classList.toggle('sel', autoMode); $('info').textContent = autoMode ? 'Tippe jetzt im Bild auf das passende Körperteil.' : ''; };
 $('fitReset').onclick = () => { delete fitStates[sel.value]; refreshMode(); build(); };
 $('fitScale').addEventListener('input', () => { const st = fitState(), k = +$('fitScale').value / st.scale, c = centroid(st.pts); st.pts.forEach((q) => { q[0] = c[0] + (q[0] - c[0]) * k; q[1] = c[1] + (q[1] - c[1]) * k; }); st.scale = +$('fitScale').value; build(); });
 
