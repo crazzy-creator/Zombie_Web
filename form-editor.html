@@ -40,6 +40,7 @@
   <header>
     <button id="menu">☰ Menü</button>
     <select id="part"></select>
+    <button id="btnDone" title="Dieses Teil sperren, damit nichts mehr aus Versehen verschoben oder gespiegelt wird">✔ Fertig</button>
     <button id="undo" title="Rückgängig">↶</button>
     <button id="redo" title="Wiederholen">↷</button>
     <button id="check">Prüfen</button>
@@ -134,6 +135,15 @@ const topQ = new URLSearchParams(location.search).get('top');
 if (topQ) document.documentElement.style.setProperty('--top', Math.max(0, +topQ || 0) + 'px');
 if (EMB) $('close').style.display = '';
 const KINDS = [['zombie', 'Zombie'], ['fat', 'Fetter Zombie'], ['alien', 'Alien'], ['robot', 'Roboter']];
+let doneP = {};   // fertig (gesperrte) Körperteile der aktuellen Figur
+const DONEKEY = (k) => 'zd_form_done_' + k;
+const isDone = (p) => !!doneP[p];
+const curDone = () => isDone($('part').value);
+function flashLocked() { draftNote = '🔒 Dieses Teil ist „fertig“ und gesperrt – oben „Bearbeiten“ antippen, um es wieder freizugeben. '; draw(); }
+function refreshDone() {
+  const o = $('part').options; for (let i = 0; i < o.length; i++) { const lab = (PARTS.find((q) => q[0] === o[i].value) || [0, o[i].value])[1]; o[i].textContent = (isDone(o[i].value) ? '🔒 ' : '') + lab; }
+  const d = curDone(); $('btnDone').textContent = d ? '🔒 Bearbeiten' : '✔ Fertig'; $('btnDone').classList.toggle('sel', d);
+}
 const PARTS = [['torso', 'Rumpf + Kopf'], ['armN', 'Arm vorn'], ['armF', 'Arm hinten'], ['beinN', 'Bein vorn'], ['beinF', 'Bein hinten']];
 for (const [id, l] of KINDS) $('kind').add(new Option(l, id));
 for (const [id, l] of PARTS) $('part').add(new Option(l, id));
@@ -170,7 +180,7 @@ const kap = () => S0 * align.s;
 const rr = () => (align.r * Math.PI) / 180;
 function ensureMc(a, part) { if ((a.mx || a.my) && !a.mc && work && work[part]) { const bb = bboxOf(work[part]); a.mc = { cc: [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], al: partAxis(work[part]) }; } }
 function reflOf(a, sg) { const c2 = Math.cos(a.mc.al), s2 = Math.sin(a.mc.al), cc = a.mc.cc, R = [sg * (2 * c2 * c2 - 1), sg * 2 * c2 * s2, sg * 2 * c2 * s2, sg * (2 * s2 * s2 - 1)]; return [R[0], R[2], R[1], R[3], cc[0] - R[0] * cc[0] - R[1] * cc[1], cc[1] - R[2] * cc[0] - R[3] * cc[1]]; }
-function Rtot(a) { if (!a.mx && !a.my) return null; if (!a.mc) ensureMc(a, $('part').value); if (!a.mc) return null; let m = a.my ? reflOf(a, -1) : null; if (a.mx) m = m ? mmul(reflOf(a, 1), m) : reflOf(a, 1); return m; }
+function Rtot(a) { if (!a.mx && !a.my) return null; if ($('part').value === 'torso') return null; if (!a.mc) ensureMc(a, $('part').value); if (!a.mc) return null; let m = a.my ? reflOf(a, -1) : null; if (a.mx) m = m ? mmul(reflOf(a, 1), m) : reflOf(a, 1); return m; }
 const applyM = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 function cmToImg(x, y) { const R = Rtot(align); if (R) [x, y] = applyM(R, x, y); const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a); return [align.tx + k * (x * co - y * si), align.ty + k * (x * si + y * co)]; }
 function imgToCm(ix, iy) { const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a), dx = (ix - align.tx) / k, dy = (iy - align.ty) / k, r = [dx * co + dy * si, -dx * si + dy * co], R = Rtot(align); return R ? applyM(R, r[0], r[1]) : r; }
@@ -231,6 +241,7 @@ async function setInfo(msg) {
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
   T = {}; TF = {}; const cust = msg.custom;
   if (cust) for (const k in cust.bones || {}) T[k] = tFrom(cust.bones[k]);
+  if (cust) for (const k in cust.fingers || {}) if (BN[k]) T[k] = tFrom(cust.fingers[k]);
   O = {}; if (cust) for (const k in cust.organs || {}) O[k] = cust.organs[k].slice();
   links = linksFrom(cust && cust.links);
   baseline();
@@ -240,10 +251,11 @@ async function setInfo(msg) {
   const bs = $('boneSel'); bs.innerHTML = ''; bs.add(new Option('Knochen wählen …', '')); for (const b of info.bones) bs.add(new Option(b.label || b.name, b.name));
   const os = $('orgSel'); os.innerHTML = ''; os.add(new Option('Innerei wählen …', '')); for (const d of info.organDefs || []) os.add(new Option(d.name, d.name));
   selOrg = null;
+  try { doneP = JSON.parse(localStorage.getItem(DONEKEY(info.kind)) || '{}'); } catch (e) { doneP = {}; }
   $('kind').value = info.kind; sel = null; dirty = true; draftNote = note; undoStack = []; redoStack = [];
   for (const k in aligns) delete aligns[k]; for (const k in touched) delete touched[k];
   ref = null; await loadRef(info.kind);
-  fitView(); fitAlign(); draw(); pvBitmap = null; for (const k in pvKeys) delete pvKeys[k]; schedulePreview();
+  refreshDone(); fitView(); fitAlign(); draw(); pvBitmap = null; for (const k in pvKeys) delete pvKeys[k]; schedulePreview();
 }
 let draftNote = '';
 
@@ -269,13 +281,14 @@ function currentData() {
   for (const [p] of PARTS) if (JSON.stringify(work[p].map((q) => q.map((v) => Math.round(v * 100) / 100))) !== JSON.stringify(info.base[p])) data.outlines[p] = work[p].map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]);
   for (const k in T) if (hasT(T[k]) && BN[k] && !BN[k].editorOnly) { const t = T[k], kl = t[3] || 1, kw = t.length >= 5 ? (t[4] || 1) : kl, o = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10]; if (Math.abs(kl - 1) > 0.002 || Math.abs(kw - 1) > 0.002) o.push(Math.round(kl * 1000) / 1000, Math.round(kw * 1000) / 1000); data.bones[k] = o; }
   for (const k in O) { const t = O[k]; if (Math.abs(t[0]) > 0.005 || Math.abs(t[1]) > 0.005 || Math.abs(t[2]) > 0.05 || Math.abs(t[3] - 1) > 0.002 || Math.abs(t[4] - 1) > 0.002) data.organs[k] = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10, Math.round(t[3] * 1000) / 1000, Math.round(t[4] * 1000) / 1000]; }
+  const fd = fingerData(); if (Object.keys(fd).length) data.fingers = fd;
   for (const k in links) { const l = links[k]; if (!l.off.size && !l.on.size) continue; data.links[k] = { off: [...l.off].map((i) => [info.verts[i].x, info.verts[i].y]), on: [...l.on].map((i) => [info.verts[i].x, info.verts[i].y]) }; }
   return data;
 }
-function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length; }
+function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length && !Object.keys(d.fingers || {}).length; }
 let draftTimer = 0;
 function fingerData() { const o = {}; for (const k in T) if (BN[k] && BN[k].editorOnly && hasT(T[k])) o[k] = T[k].map((v) => Math.round(v * 1000) / 1000); return o; }
-function saveDraft() { schedulePreview(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fingers = fingerData(); d.fit = TF; if (isEmpty(d) && !Object.keys(d.fingers).length) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
+function saveDraft() { schedulePreview(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fit = TF; if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
 function loadDraft(kind) { try { return (JSON.parse(localStorage.getItem(DRAFT) || '{}')[kind] || {}).data || null; } catch (e) { return null; } }
 function clearDraft(kind) { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); delete all[kind]; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }
 function applyDraft(d) {
@@ -309,6 +322,7 @@ function bpInv(b, t, X, Y) {
 function fitOutlines() {
   if (!info) return 0; let n = 0;
   for (const [part] of PARTS) {
+    if (isDone(part)) continue;
     const bs = info.bones.filter((b) => b.group === part && !b.editorOnly && b.core && b.core.length >= 2); if (!bs.length) continue;
     const Tf = TF[part] || {};
     const segs = bs.map((b) => [b, bpT(b, Tf[b.name], b.core[0][0], b.core[0][1]), bpT(b, Tf[b.name], b.core[1][0], b.core[1][1])]);
@@ -481,8 +495,8 @@ function skinCanvas(part, a) {
   const k = S0 * a.s, r = (a.r * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r), fx = TW / bw, fy = TH / bh;
   let m = [co / k, -si / k, si / k, co / k, (-a.tx * co - a.ty * si) / k, (a.tx * si - a.ty * co) / k];    // Bild -> cm
   ensureMc(a, part);
-  if (a.mx) m = mmul(reflOf(a, 1), m);       // quer zur Längsachse spiegeln
-  if (a.my) m = mmul(reflOf(a, -1), m);      // entlang der Längsachse spiegeln
+  if (a.mx && part !== 'torso') m = mmul(reflOf(a, 1), m);       // quer zur Längsachse spiegeln
+  if (a.my && part !== 'torso') m = mmul(reflOf(a, -1), m);      // entlang der Längsachse spiegeln
   const q = [fx, 0, 0, fy, -ox * fx, -oy * fy];
   const t = mmul(q, m);
   g.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]);
@@ -577,8 +591,8 @@ const pos = (e) => {
   return [x - ox, y - oy];
 };
 function zoomView(f, cx, cy) { const nz = Math.min(fitZ * 12, Math.max(fitZ * 0.2, view.z * f)); f = nz / view.z; view.px = cx - (cx - view.px) * f; view.py = cy - (cy - view.py) * f; view.z = nz; $('zoom').value = Math.min(6, Math.max(0.25, view.z / fitZ)); }
-function zoomAlign(f, cx, cy) { const [ix, iy] = scrToImg(cx, cy); const ns = Math.min(align.s0 * 6, Math.max(align.s0 * 0.2, align.s * f)); f = ns / align.s; align.tx = ix - (ix - align.tx) * f; align.ty = iy - (iy - align.ty) * f; align.s = ns; $('asc').value = Math.min(3, align.s / align.s0); alignTouch(); }
-function rotAlign(deg, cx, cy) { const [ix, iy] = scrToImg(cx, cy), a = (deg * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a), dx = ix - align.tx, dy = iy - align.ty; align.tx = ix - (dx * co - dy * si); align.ty = iy - (dx * si + dy * co); align.r += deg; alignTouch(); }
+function zoomAlign(f, cx, cy) { if (curDone()) return; const [ix, iy] = scrToImg(cx, cy); const ns = Math.min(align.s0 * 6, Math.max(align.s0 * 0.2, align.s * f)); f = ns / align.s; align.tx = ix - (ix - align.tx) * f; align.ty = iy - (iy - align.ty) * f; align.s = ns; $('asc').value = Math.min(3, align.s / align.s0); alignTouch(); }
+function rotAlign(deg, cx, cy) { if (curDone()) return; const [ix, iy] = scrToImg(cx, cy), a = (deg * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a), dx = ix - align.tx, dy = iy - align.ty; align.tx = ix - (dx * co - dy * si); align.ty = iy - (dx * si + dy * co); align.r += deg; alignTouch(); }
 function inTri(x, y, t) { const d1 = (x - t[2]) * (t[1] - t[3]) - (t[0] - t[2]) * (y - t[3]), d2 = (x - t[4]) * (t[3] - t[5]) - (t[2] - t[4]) * (y - t[5]), d3 = (x - t[0]) * (t[5] - t[1]) - (t[4] - t[0]) * (y - t[1]); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); }
 function pickBone(x, y) {
   const part = $('part').value, solo = $('solo').checked; let best = null, bl = -1;
@@ -589,6 +603,7 @@ cv.addEventListener('pointerdown', (e) => {
   if (!info) return; const p = pos(e); ptrs.set(e.pointerId, p); cv.setPointerCapture(e.pointerId); e.preventDefault();
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, ang: Math.atan2(b[1] - a[1], b[0] - a[0]), t0: Date.now(), d0: Math.hypot(a[0] - b[0], a[1] - b[1]), x0: (a[0] + b[0]) / 2, y0: (a[1] + b[1]) / 2, moved: false }; drag = null; return; }
   const part = $('part').value;
+  if (((mode === 'form' || mode === 'align') && isDone(part)) || (mode === 'organ' && isDone('torso'))) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
   if (mode === 'form') {
     pushUndo();
     const pts = work[part]; let bi = -1, bd = 15;
@@ -601,6 +616,7 @@ cv.addEventListener('pointerdown', (e) => {
     drag = bi >= 0 ? { kind: 'pt', i: bi } : { kind: 'pan', last: p };
   } else if (mode === 'bone' && $('allowBones').checked) {
     const [x, y] = scrToCm(p[0], p[1]);
+    if (boneAct === 'link' && sel && isDone(BN[sel].group)) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
     if (boneAct === 'link' && sel) {
       const b = BN[sel]; let bi = -1, bd = 14;
       info.verts.forEach((v, i) => { if (!vertOk(b, v)) return; const s = cmToScr(v.x, v.y), d = Math.hypot(s[0] - p[0], s[1] - p[1]); if (d < bd) { bd = d; bi = i; } });
@@ -608,11 +624,13 @@ cv.addEventListener('pointerdown', (e) => {
     }
     if (boneAct === 'span') {
       if (e.ctrlKey || e.metaKey || e.shiftKey) { const h3 = pickBone(x, y); if (h3) { sel = h3; $('boneSel').value = h3; } draw(); return; }
+      if (sel && isDone(BN[sel].group)) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
       if (!sel) { const h2 = pickBone(x, y); if (h2) { sel = h2; $('boneSel').value = h2; } draw(); return; }
       const b = BN[sel], ends = b.core.map(([cx2, cy2]) => bp(b, cx2, cy2)), d0 = Math.hypot(ends[0][0] - x, ends[0][1] - y), d1 = Math.hypot(ends[1][0] - x, ends[1][1] - y);
       pushUndo(); drag = { kind: 'span', p1: [x, y], p2: [x, y], snap: T[sel] ? T[sel].slice() : null, flip: d1 < d0 }; draw(); return;
     }
     const hit = pickBone(x, y);
+    if (hit && isDone(BN[hit].group)) { sel = hit; $('boneSel').value = hit; flashLocked(); drag = { kind: 'pan', last: p }; return; }
     if (hit) { sel = hit; $('boneSel').value = hit; pushUndo(); drag = { kind: boneAct === 'rot' ? 'rot' : boneAct === 'scale' ? 'scale' : boneAct === 'move' ? 'bone' : 'pan', last: p }; } else drag = { kind: 'pan', last: p };
     draw();
   } else if (mode === 'organ') {
@@ -630,7 +648,7 @@ cv.addEventListener('pointermove', (e) => {
   const group = () => ($('withKids').checked ? subtree(sel) : [sel]);
   if (drag.kind === 'pt') { const [x, y] = scrToCm(p[0], p[1]); const q = [x, y]; if ($('protect').checked) pushOut(q); work[part][drag.i] = q; saveDraft(); }
   else if (drag.kind === 'pan') { view.px += p[0] - drag.last[0]; view.py += p[1] - drag.last[1]; drag.last = p; }
-  else if (drag.kind === 'align') { align.tx += (p[0] - drag.last[0]) / view.z; align.ty += (p[1] - drag.last[1]) / view.z; drag.last = p; alignTouch(); }
+  else if (drag.kind === 'align') { if (curDone()) return; align.tx += (p[0] - drag.last[0]) / view.z; align.ty += (p[1] - drag.last[1]) / view.z; drag.last = p; alignTouch(); }
   else if (drag.kind === 'span' && sel) {
     drag.p2 = scrToCm(p[0], p[1]);
     if (drag.snap) T[sel] = drag.snap.slice(); else delete T[sel];
@@ -659,7 +677,7 @@ const up = (e) => { if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && 
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('dblclick', (e) => {
-  if (mode !== 'form' || !info) return; const p = pos(e), pts = work[$('part').value]; if (pts.length <= 6) return;
+  if (mode !== 'form' || !info) return; if (curDone()) return flashLocked(); const p = pos(e), pts = work[$('part').value]; if (pts.length <= 6) return;
   let bi = -1, bd = 15; pts.forEach(([x, y], i) => { const [sx, sy] = cmToScr(x, y); const d = Math.hypot(sx - p[0], sy - p[1]); if (d < bd) { bd = d; bi = i; } });
   if (bi >= 0) { pushUndo(); pts.splice(bi, 1); changed(); }
 });
@@ -676,14 +694,14 @@ function setOrgAct(a) { orgAct = a; for (const [id, aa] of [['oMove', 'move'], [
 $('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone'); $('mOrgan').onclick = () => setMode('organ');
 $('oMove').onclick = () => setOrgAct('move'); $('oRot').onclick = () => setOrgAct('rot'); $('oScale').onclick = () => setOrgAct('scale');
 $('orgSel').onchange = () => { selOrg = $('orgSel').value || null; draw(); };
-$('resetOrgans').onclick = () => { pushUndo(); O = {}; selOrg = null; changed(); };
+$('resetOrgans').onclick = () => { if (isDone('torso')) return flashLocked(); pushUndo(); O = {}; selOrg = null; changed(); };
 $('bFit').onclick = () => { pushUndo(); const n = fitOutlines(); draftNote = n ? `Umrisse angepasst (${n} Teile). ` : 'Nichts anzupassen – Knochen unverändert. '; changed(); };
 $('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link'); $('bSpan').onclick = () => setAct('span');
 $('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
-$('bFree').onclick = () => { if (!sel) return; pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
+$('bFree').onclick = () => { if (!sel) return; if (isDone(BN[sel].group)) return flashLocked(); pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
 $('boneSel').onchange = () => { sel = $('boneSel').value || null; draw(); };
 // Feinjustierung der Figur-Ebene
-const nudge = (dx, dy) => { const st = (fineMode ? 0.5 : 4) / view.z; align.tx += dx * st; align.ty += dy * st; alignTouch(); draw(); };
+const nudge = (dx, dy) => { if (curDone()) return flashLocked(); const st = (fineMode ? 0.5 : 4) / view.z; align.tx += dx * st; align.ty += dy * st; alignTouch(); draw(); };
 $('nL').onclick = () => nudge(-1, 0); $('nR').onclick = () => nudge(1, 0); $('nU').onclick = () => nudge(0, -1); $('nD').onclick = () => nudge(0, 1);
 const mid = () => [cw / 2, ch / 2];
 $('sM').onclick = () => { zoomAlign(fineMode ? 0.998 : 0.99, ...mid()); draw(); }; $('sP').onclick = () => { zoomAlign(fineMode ? 1.002 : 1.01, ...mid()); draw(); };
@@ -693,8 +711,8 @@ $('zoom').addEventListener('input', () => { const nz = fitZ * +$('zoom').value, 
 $('asc').addEventListener('input', () => { const ns = align.s0 * +$('asc').value; zoomAlign(ns / align.s, cw / 2, ch / 2); draw(); });
 $('alpha').addEventListener('input', draw);
 $('arot').addEventListener('input', () => { rotAlign(+$('arot').value - align.r, cw / 2, ch / 2); draw(); });
-$('mAx').onclick = () => { align.mx = !align.mx; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
-$('mLn').onclick = () => { align.my = !align.my; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
+$('mAx').onclick = () => { if (curDone()) return flashLocked(); if ($('part').value === 'torso') { draftNote = 'Spiegeln gibt es nur für Arme und Beine. '; draw(); return; } align.mx = !align.mx; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
+$('mLn').onclick = () => { if (curDone()) return flashLocked(); if ($('part').value === 'torso') { draftNote = 'Spiegeln gibt es nur für Arme und Beine. '; draw(); return; } align.my = !align.my; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
 for (const id of ['showBones', 'showAll', 'protect', 'showThreads', 'withKids', 'showSkin', 'showOrgans', 'kLen', 'kWid', 'oLen', 'oWid']) $(id).addEventListener('change', draw);
 $('solo').addEventListener('change', () => { fitAlign(); draw(); });
 $('keepRef').addEventListener('change', () => { if ($('keepRef').checked) saveRef(); else if (info) kvDel('ref/' + info.kind); });
@@ -704,7 +722,8 @@ $('info').textContent = 'Aufbau: 1 Ausrichten = Referenzbild laden und die Figur
 $('rot').addEventListener('change', () => { rot = +$('rot').value; try { localStorage.setItem('zd_form_rot', String(rot)); } catch (e) {} resize(); fitView(); draw(); });
 try { const r0 = localStorage.getItem('zd_form_rot'); if (r0 === '90' || r0 === '-90') { rot = +r0; $('rot').value = r0; } } catch (e) {}
 $('allowBones').addEventListener('change', () => { if ($('allowBones').checked) setMode('bone'); draw(); });
-$('part').addEventListener('change', () => { dirty = true; fitAlign(); draw(); });
+$('part').addEventListener('change', () => { dirty = true; fitAlign(); refreshDone(); draw(); });
+$('btnDone').onclick = () => { const p = $('part').value; if (doneP[p]) delete doneP[p]; else doneP[p] = 1; try { localStorage.setItem(DONEKEY(info.kind), JSON.stringify(doneP)); } catch (e) {} refreshDone(); draftNote = doneP[p] ? '🔒 Teil als fertig markiert. ' : 'Teil wieder freigegeben. '; draw(); };
 $('kind').addEventListener('change', () => post({ zdForm: 'need', kind: $('kind').value }));
 $('file').onchange = (e) => {
   const f = e.target.files[0]; if (!f) return; const url = URL.createObjectURL(f), im = new Image();
@@ -714,7 +733,7 @@ $('file').onchange = (e) => {
 $('undo').onclick = undo; $('redo').onclick = redo;
 window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); } });
 $('check').onclick = () => { if (info) showCheck(); };
-$('resetPart').onclick = () => { pushUndo(); const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
+$('resetPart').onclick = () => { if (curDone()) return flashLocked(); pushUndo(); const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
 $('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; TF = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
 $('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; changed(); };
 $('resetLinks').onclick = () => { pushUndo(); if (sel) delete links[sel]; else links = {}; changed(); };
