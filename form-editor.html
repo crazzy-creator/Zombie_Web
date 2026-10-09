@@ -46,13 +46,8 @@
     <div class="row"><label>Figur <select id="kind"></select></label>
       <label id="rotLbl">Ansicht <select id="rot" title="Ansicht drehen"><option value="0">Querformat</option><option value="90">Hochformat (Handy nach links gekippt)</option><option value="-90">Hochformat (Handy nach rechts gekippt)</option></select></label></div>
     <div class="row"><label class="btn">Referenzbild laden<input id="file" type="file" accept="image/*" style="display:none"></label>
-      <button id="xfer">Export / Import</button></div>
+      <button id="xfer">Export / Import</button><button id="resetAll">Figur zurücksetzen</button></div>
     <div class="row"><label><input id="keepRef" type="checkbox" checked> Bild &amp; Ausrichtung merken</label><label><input id="useRef" type="checkbox" checked> Haut aus Referenzbild übernehmen</label></div>
-    <div class="row"><label><input id="solo" type="checkbox" checked> Teile einzeln ausrichten (entkoppelt, nur zum Texturieren)</label></div>
-    <div class="row"><button id="resetPart">Teil zurücksetzen</button><button id="resetAll">Figur zurücksetzen</button><button id="resetBones">Knochen zurücksetzen</button><button id="resetLinks">Fäden zurücksetzen</button></div>
-    <div class="row"><label><input id="showBones" type="checkbox" checked> Knochen zeigen</label><label><input id="showThreads" type="checkbox" checked> Fäden zeigen</label><label><input id="showAll" type="checkbox" checked> alle Teile zeigen</label><label><input id="showSkin" type="checkbox"> Haut-Vorschau auf dem Umriss</label></div>
-    <div class="row"><label><input id="protect" type="checkbox" checked> Schutzabstand zu Knochen</label><label><input id="allowBones" type="checkbox"> Knochen verschiebbar</label></div>
-    <div class="row"><label>Bild-Deckkraft <input id="alpha" type="range" min="0" max="1" step="0.02" value="0.85"></label></div>
     <div class="hint" id="info"></div>
     <div class="row"><button id="menuClose" class="main">Fertig</button></div>
   </div>
@@ -61,29 +56,66 @@
       <button id="mAlign" class="sel">1 Ausrichten</button>
       <button id="mForm">2 Form</button>
       <button id="mBone">3 Knochen</button>
+      <button id="mOrgan">4 Innereien</button>
     </div>
-    <div class="row" id="fineRow">
-      <button id="nL">◀</button><button id="nR">▶</button><button id="nU">▲</button><button id="nD">▼</button>
-      <button id="sM">−</button><button id="sP">+</button>
-      <button id="rM">⟲</button><button id="rP">⟳</button>
-      <button id="mAx" title="Spiegelt die Haut dieses Teils quer zur Längsachse (z. B. Daumen auf die andere Seite)">⇋ Daumen-Seite</button><button id="mLn" title="Spiegelt die Haut entlang der Längsachse (oben/unten tauschen)">⇅ umdrehen</button>
-      <button id="fine" class="sel">fein</button>
-      <span class="hint" id="alignInfo"></span>
+    <div id="alignRows">
+      <div class="row">
+        <button id="nL">◀</button><button id="nR">▶</button><button id="nU">▲</button><button id="nD">▼</button>
+        <button id="sM">−</button><button id="sP">+</button>
+        <button id="rM">⟲</button><button id="rP">⟳</button>
+        <button id="fine" class="sel">fein</button>
+        <span class="hint" id="alignInfo"></span>
+      </div>
+      <div class="row">
+        <button id="mAx" title="Spiegelt die Haut dieses Teils quer zur Längsachse (z. B. Daumen auf die andere Seite)">⇋ Daumen-Seite</button><button id="mLn" title="Spiegelt die Haut entlang der Längsachse (oben/unten tauschen)">⇅ umdrehen</button>
+        <label><input id="solo" type="checkbox" checked> Teile einzeln ausrichten (entkoppelt)</label>
+        <label><input id="showSkin" type="checkbox"> Haut-Vorschau</label>
+        <label>Bild-Deckkraft <input id="alpha" type="range" min="0" max="1" step="0.02" value="0.85"></label>
+      </div>
     </div>
-    <div class="row" id="boneRow" style="display:none">
-      <select id="boneSel"></select>
-      <button id="bMove" class="sel">Verschieben</button>
-      <button id="bRot">Drehen</button>
-      <button id="bScale">Skalieren</button>
-      <button id="bLink">Fäden</button>
-      <label><input id="withKids" type="checkbox" checked> mit Anhang</label>
-      <button id="bPivot">Drehpunkt: Gelenk</button>
-      <button id="bFree">Knochen zurück</button>
+    <div id="formRows" class="row" style="display:none">
+      <label><input id="protect" type="checkbox" checked> Schutzabstand zu Knochen</label>
+      <label><input id="showAll" type="checkbox" checked> alle Teile zeigen</label>
+      <label><input id="showBones" type="checkbox" checked> Knochen zeigen</label>
+      <button id="resetPart">Teil zurücksetzen</button>
     </div>
-    <div class="row">
+    <div id="boneRows" style="display:none">
+      <div class="row">
+        <select id="boneSel"></select>
+        <button id="bMove" class="sel">Verschieben</button>
+        <button id="bRot">Drehen</button>
+        <button id="bScale">Skalieren</button>
+        <button id="bLink">Fäden</button>
+        <span id="kScale" style="display:none"><label><input id="kLen" type="checkbox" checked> Länge</label> <label><input id="kWid" type="checkbox" checked> Breite</label></span>
+      </div>
+      <div class="row">
+        <label><input id="allowBones" type="checkbox"> Knochen verschiebbar</label>
+        <label><input id="withKids" type="checkbox" checked> mit Anhang</label>
+        <button id="bPivot">Drehpunkt: Gelenk</button>
+        <button id="bFree">Knochen zurück</button>
+      </div>
+      <div class="row">
+        <label><input id="showThreads" type="checkbox" checked> Fäden zeigen</label>
+        <button id="resetBones">Alle Knochen zurücksetzen</button><button id="resetLinks">Fäden zurücksetzen</button>
+      </div>
+    </div>
+    <div id="organRows" style="display:none">
+      <div class="row">
+        <select id="orgSel"></select>
+        <button id="oMove" class="sel">Verschieben</button>
+        <button id="oRot">Drehen</button>
+        <button id="oScale">Skalieren</button>
+        <span id="oScaleOpts" style="display:none"><label><input id="oLen" type="checkbox" checked> Länge</label> <label><input id="oWid" type="checkbox" checked> Breite</label></span>
+      </div>
+      <div class="row">
+        <label><input id="showOrgans" type="checkbox" checked> Innereien zeigen</label>
+        <button id="resetOrgans">Innereien zurücksetzen</button>
+      </div>
+    </div>
+    <div class="row" id="sliderRow">
       <label>Zoom <input id="zoom" type="range" min="0.25" max="6" step="0.01" value="1"></label>
-      <label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
-      <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label>
+      <span id="alignSliders"><label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
+      <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label></span>
     </div>
     <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
     <div class="hint" id="status"></div>
@@ -101,7 +133,7 @@ for (const [id, l] of KINDS) $('kind').add(new Option(l, id));
 for (const [id, l] of PARTS) $('part').add(new Option(l, id));
 const S0 = 8, MARGIN = 1.3, TOL = 0.9, CMPX = 2.4;
 const cv = $('cv'), c = cv.getContext('2d');
-let info = null, saved = {}, work = {}, T = {}, links = {};   // T: Knochen -> [dx, dy, Grad, Maßstab] (absolut), links: Knochen -> {off:Set, on:Set}
+let info = null, saved = {}, work = {}, T = {}, links = {}, O = {}, selOrg = null, orgAct = 'move';   // T: Knochen -> [dx, dy, Grad, Maßstab] (absolut), links: Knochen -> {off:Set, on:Set}
 let mode = 'align', boneAct = 'move', pivotMode = 'joint', ref = null, fineMode = true;
 let view = { z: 1, px: 0, py: 0 }, fitZ = 1;
 let align = { s: 1, s0: 1, tx: 0, ty: 0, r: 0 };
@@ -140,19 +172,46 @@ const K = () => S0 * align.s * view.z;   // Schirm-Pixel je cm
 // ---------- Knochen-Lagen ----------
 let BN = {}, NAMES = [];
 function subtree(name) { const s = new Set([name]); let again = true; while (again) { again = false; for (const b of info.bones) if (b.parent && s.has(b.parent) && !s.has(b.name)) { s.add(b.name); again = true; } } return s; }
-function bp(b, x, y) { const t = T[b.name]; if (!t) return [x, y]; const k = t[3] || 1, a = (t[2] * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a), dx = (x - b.cx) * k, dy = (y - b.cy) * k; return [b.cx + dx * co - dy * si + t[0], b.cy + dx * si + dy * co + t[1]]; }
-function moveBody(name, phi, k, q, e) {   // Drehung phi (Bogenmaß) und Skalierung k um q, dann Verschiebung e
-  const b = BN[name], t = T[name] || (T[name] = [0, 0, 0, 1]);
+function bp(b, x, y) {
+  const t = T[b.name]; if (!t) return [x, y];
+  const kl = t[3] || 1, kw = t.length >= 5 ? (t[4] || 1) : kl, g = b.ang || 0, cg = Math.cos(g), sg = Math.sin(g), a = (t[2] * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a);
+  const dx = x - b.cx, dy = y - b.cy, lx = (cg * dx + sg * dy) * kl, ly = (-sg * dx + cg * dy) * kw, wx = cg * lx - sg * ly, wy = sg * lx + cg * ly;
+  return [b.cx + wx * co - wy * si + t[0], b.cy + wx * si + wy * co + t[1]];
+}
+function moveBody(name, phi, k, q, e) {   // Drehung phi (Bogenmaß) und gleichmäßige Skalierung k um q, dann Verschiebung e
+  const b = BN[name], t = T[name] || (T[name] = [0, 0, 0, 1, 1]);
+  if (t.length < 5) t[4] = t[3] || 1;
   const cc = [b.cx + t[0], b.cy + t[1]], co = Math.cos(phi), si = Math.sin(phi), dx = (cc[0] - q[0]) * k, dy = (cc[1] - q[1]) * k;
   const nc = [q[0] + dx * co - dy * si + e[0], q[1] + dx * si + dy * co + e[1]];
-  t[0] = nc[0] - b.cx; t[1] = nc[1] - b.cy; t[2] += (phi * 180) / Math.PI; t[3] = (t[3] || 1) * k;
+  t[0] = nc[0] - b.cx; t[1] = nc[1] - b.cy; t[2] += (phi * 180) / Math.PI; t[3] = (t[3] || 1) * k; t[4] = (t[4] || 1) * k;
+}
+function scaleAniso(name, kl, kw, q, axis, shape) {   // Länge/Breite getrennt: Mittelpunkt wandert in Knochen-Achsen, Form nur beim gewählten Knochen
+  const b = BN[name], t = T[name] || (T[name] = [0, 0, 0, 1, 1]);
+  if (t.length < 5) t[4] = t[3] || 1;
+  const cc = [b.cx + t[0], b.cy + t[1]], ca = Math.cos(axis), sa = Math.sin(axis), dx = cc[0] - q[0], dy = cc[1] - q[1];
+  const lx = (ca * dx + sa * dy) * kl, ly = (-sa * dx + ca * dy) * kw;
+  t[0] = q[0] + ca * lx - sa * ly - b.cx; t[1] = q[1] + sa * lx + ca * ly - b.cy;
+  if (shape) { t[3] = (t[3] || 1) * kl; t[4] = (t[4] || 1) * kw; }
 }
 function parentJoint(name) { const b = BN[name]; if (!b || !b.parent) return null; return info.joints.find((j) => (j.a === name && j.b === b.parent) || (j.b === name && j.a === b.parent)) || null; }
 function pivotOf(name) { const b = BN[name]; const j = pivotMode === 'joint' ? parentJoint(name) : null; return j ? bp(b, j.x, j.y) : bp(b, b.cx, b.cy); }
-const hasT = (t) => Math.abs(t[0]) > 0.005 || Math.abs(t[1]) > 0.005 || Math.abs(t[2]) > 0.05 || Math.abs((t[3] || 1) - 1) > 0.002;
+const hasT = (t) => Math.abs(t[0]) > 0.005 || Math.abs(t[1]) > 0.005 || Math.abs(t[2]) > 0.05 || Math.abs((t[3] || 1) - 1) > 0.002 || Math.abs(((t.length >= 5 ? t[4] : t[3]) || 1) - 1) > 0.002;
 const grpOf = (b) => b.group;
 
+// ---------- Innereien ----------
+const orgT = (n) => O[n] || (O[n] = [0, 0, 0, 1, 1]);
+function orgCenter(def) { return [def.poly.reduce((s2, p) => s2 + p[0], 0) / def.poly.length, def.poly.reduce((s2, p) => s2 + p[1], 0) / def.poly.length]; }
+function orgPoly(def) {
+  const t = O[def.name]; if (!t) return def.poly;
+  const [cx, cy] = orgCenter(def), a = (t[2] * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a);
+  return def.poly.map(([x, y]) => { const vx = (x - cx) * t[3], vy = (y - cy) * t[4]; return [cx + t[0] + vx * co - vy * si, cy + t[1] + vx * si + vy * co]; });
+}
+function orgNow(def) { const t = O[def.name] || [0, 0, 0, 1, 1], [cx, cy] = orgCenter(def); return [cx + t[0], cy + t[1]]; }
+function orgPts() { const out = []; for (const d of info.organDefs || []) { const poly = orgPoly(d); for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.7)); for (let k = 0; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]); } } return out; }
+function pickOrgan(x, y) { let best = null; for (const d of info.organDefs || []) if (inPoly(x, y, orgPoly(d))) best = d.name; return best; }
+
 // ---------- Daten laden ----------
+const tFrom = (a) => { const kl = a[3] || 1; return [a[0] || 0, a[1] || 0, a[2] || 0, kl, a.length >= 5 ? (a[4] || 1) : kl]; };
 function nearestVert(x, y, g) { let bi = -1, bd = TOL; info.verts.forEach((v, i) => { if (g && v.g !== g) return; const d = Math.hypot(v.x - x, v.y - y); if (d < bd) { bd = d; bi = i; } }); return bi; }
 function linksFrom(src) { const out = {}; for (const k in src || {}) { const l = (out[k] = { off: new Set(), on: new Set() }); for (const [x, y] of src[k].off || []) { const i = nearestVert(x, y); if (i >= 0) l.off.add(i); } for (const [x, y] of src[k].on || []) { const i = nearestVert(x, y); if (i >= 0) l.on.add(i); } } return out; }
 async function setInfo(msg) {
@@ -161,12 +220,15 @@ async function setInfo(msg) {
   info = msg.info; saved = msg.saved || {}; BN = {}; NAMES = info.bones.map((b) => b.name); for (const b of info.bones) BN[b.name] = b;
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
   T = {}; const cust = msg.custom;
-  if (cust) for (const k in cust.bones || {}) T[k] = [cust.bones[k][0] || 0, cust.bones[k][1] || 0, cust.bones[k][2] || 0, cust.bones[k][3] || 1];
+  if (cust) for (const k in cust.bones || {}) T[k] = tFrom(cust.bones[k]);
+  O = {}; if (cust) for (const k in cust.organs || {}) O[k] = cust.organs[k].slice();
   links = linksFrom(cust && cust.links);
   let note = '';
   if (!msg.fresh) { const d = loadDraft(info.kind); if (d) { applyDraft(d); note = 'Entwurf geladen. '; } }
   // Bone-Auswahl
   const bs = $('boneSel'); bs.innerHTML = ''; bs.add(new Option('Knochen wählen …', '')); for (const n of NAMES) bs.add(new Option(n, n));
+  const os = $('orgSel'); os.innerHTML = ''; os.add(new Option('Innerei wählen …', '')); for (const d of info.organDefs || []) os.add(new Option(d.name, d.name));
+  selOrg = null;
   $('kind').value = info.kind; sel = null; dirty = true; draftNote = note; undoStack = []; redoStack = [];
   for (const k in aligns) delete aligns[k]; for (const k in touched) delete touched[k];
   ref = null; await loadRef(info.kind);
@@ -192,27 +254,29 @@ function saveRef() {
 
 // ---------- Entwurf (bleibt beim Schließen erhalten) ----------
 function currentData() {
-  const data = { outlines: {}, bones: {}, boneV: 2, links: {} };
+  const data = { outlines: {}, bones: {}, boneV: 2, links: {}, organs: {} };
   for (const [p] of PARTS) if (JSON.stringify(work[p].map((q) => q.map((v) => Math.round(v * 100) / 100))) !== JSON.stringify(info.base[p])) data.outlines[p] = work[p].map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]);
-  for (const k in T) if (hasT(T[k])) { const t = T[k], o = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10]; if (Math.abs((t[3] || 1) - 1) > 0.002) o.push(Math.round(t[3] * 1000) / 1000); data.bones[k] = o; }
+  for (const k in T) if (hasT(T[k])) { const t = T[k], kl = t[3] || 1, kw = t.length >= 5 ? (t[4] || 1) : kl, o = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10]; if (Math.abs(kl - 1) > 0.002 || Math.abs(kw - 1) > 0.002) o.push(Math.round(kl * 1000) / 1000, Math.round(kw * 1000) / 1000); data.bones[k] = o; }
+  for (const k in O) { const t = O[k]; if (Math.abs(t[0]) > 0.005 || Math.abs(t[1]) > 0.005 || Math.abs(t[2]) > 0.05 || Math.abs(t[3] - 1) > 0.002 || Math.abs(t[4] - 1) > 0.002) data.organs[k] = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10, Math.round(t[3] * 1000) / 1000, Math.round(t[4] * 1000) / 1000]; }
   for (const k in links) { const l = links[k]; if (!l.off.size && !l.on.size) continue; data.links[k] = { off: [...l.off].map((i) => [info.verts[i].x, info.verts[i].y]), on: [...l.on].map((i) => [info.verts[i].x, info.verts[i].y]) }; }
   return data;
 }
-function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length; }
+function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length; }
 let draftTimer = 0;
 function saveDraft() { if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
 function loadDraft(kind) { try { return (JSON.parse(localStorage.getItem(DRAFT) || '{}')[kind] || {}).data || null; } catch (e) { return null; } }
 function clearDraft(kind) { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); delete all[kind]; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }
 function applyDraft(d) {
   for (const p in d.outlines || {}) if (work[p]) work[p] = d.outlines[p].map((q) => q.slice());
-  T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = [d.bones[k][0] || 0, d.bones[k][1] || 0, d.bones[k][2] || 0, d.bones[k][3] || 1];
+  T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = tFrom(d.bones[k]);
+  O = {}; for (const k in d.organs || {}) O[k] = d.organs[k].slice();
   links = linksFrom(d.links);
 }
 
 // ---------- Rückgängig / Wiederholen ----------
 let undoStack = [], redoStack = [];
-const snap = () => JSON.stringify({ w: work, t: T, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
-function restore(s) { const o = JSON.parse(s); work = o.w; T = o.t; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
+const snap = () => JSON.stringify({ w: work, t: T, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
+function restore(s) { const o = JSON.parse(s); work = o.w; T = o.t; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
 function pushUndo() { const s = snap(); if (undoStack[undoStack.length - 1] !== s) { undoStack.push(s); if (undoStack.length > 60) undoStack.shift(); } redoStack = []; }
 function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); }
 function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); }
@@ -250,7 +314,7 @@ function buildSamples() {
       for (let e = 0; e < 3; e++) { const a = q[e], d = q[(e + 1) % 3], n = Math.max(1, Math.ceil(Math.hypot(d[0] - a[0], d[1] - a[1]) / 0.6)); for (let i = 0; i <= n; i++) samples.push([a[0] + (d[0] - a[0]) * i / n, a[1] + (d[1] - a[1]) * i / n, mg, b.name]); }
     }
   }
-  if (part === 'torso') for (const [x, y] of info.organs) samples.push([x, y, MARGIN, 'Organ']);
+  if (part === 'torso') for (const [x, y] of orgPts()) samples.push([x, y, MARGIN, 'Organ']);
   grid = new Map(); for (const s of samples) { const k = Math.floor(s[0] / 2) + ',' + Math.floor(s[1] / 2); (grid.get(k) || grid.set(k, []).get(k)).push(s); }
   dirty = false;
 }
@@ -398,11 +462,11 @@ function paint() {
     c.drawImage(r.cvs, r.ox, r.oy, r.bw, r.bh); c.restore();
   }
   const subs = sel ? ($('withKids').checked ? subtree(sel) : new Set([sel])) : null;
-  if ($('showBones').checked) {
+  if ($('showBones').checked || mode === 'bone') {
     for (let layer = 0; layer < 5; layer++) for (const b of info.bones) {
       if (solo && b.group !== part) continue;
       const hl = subs && subs.has(b.name);
-      c.globalAlpha = mode === 'bone' ? 0.85 : 0.5;
+      c.globalAlpha = mode === 'bone' ? 0.85 : mode === 'organ' ? 0.3 : 0.5;
       for (const t of b.tris) {
         if (t[9] !== layer) continue;
         const a = bp(b, t[0], t[1]), bb = bp(b, t[2], t[3]), cc = bp(b, t[4], t[5]);
@@ -425,11 +489,17 @@ function paint() {
       else { c.fillStyle = was ? '#ff5050' : 'rgba(255,255,255,.35)'; c.fillRect(p[0] - 2, p[1] - 2, 4, 4); if (was) { c.strokeStyle = '#ff5050'; c.beginPath(); c.moveTo(p[0] - 4, p[1] - 4); c.lineTo(p[0] + 4, p[1] + 4); c.moveTo(p[0] + 4, p[1] - 4); c.lineTo(p[0] - 4, p[1] + 4); c.stroke(); } }
     });
   }
+  if ($('showOrgans').checked && (info.organDefs || []).length) {
+    for (const d of info.organDefs) {
+      const poly = orgPoly(d), hl = d.name === selOrg; path(poly);
+      c.fillStyle = hl ? 'rgba(255,170,110,.55)' : 'rgba(255,130,150,' + (mode === 'organ' ? '.4' : '.18') + ')'; c.fill(); c.strokeStyle = hl ? '#ffd84a' : 'rgba(255,170,190,.8)'; c.lineWidth = hl ? 2.5 : 1; c.stroke();
+      if (mode === 'organ') { const [cx, cy] = orgNow(d), [sx, sy] = cmToScr(cx, cy); c.fillStyle = '#fff'; c.font = '11px system-ui'; c.textAlign = 'center'; c.fillText(d.name, sx, sy); if (hl) { c.beginPath(); c.arc(sx, sy, 9, 0, 6.3); c.strokeStyle = '#ffd84a'; c.lineWidth = 2.5; c.stroke(); } }
+    }
+  }
   for (const [p] of PARTS) { if (p === part || !$('showAll').checked || solo) continue; path(work[p]); c.strokeStyle = 'rgba(160,200,160,.55)'; c.lineWidth = 1.2; c.stroke(); }
   c.setLineDash([5, 4]); path(info.base[part]); c.strokeStyle = 'rgba(200,200,200,.5)'; c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
   path(work[part]); c.fillStyle = 'rgba(255,60,60,.12)'; c.fill(); c.strokeStyle = '#ff5050'; c.lineWidth = 2; c.stroke();
   if (mode === 'form') for (const [x, y] of work[part]) { const [sx, sy] = cmToScr(x, y); c.beginPath(); c.arc(sx, sy, 5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); c.strokeStyle = '#a00'; c.lineWidth = 1; c.stroke(); }
-  if ($('showBones').checked && part === 'torso') { c.fillStyle = 'rgba(255,150,170,.6)'; for (const [x, y] of info.organs) { const [sx, sy] = cmToScr(x, y); c.fillRect(sx - 1.5, sy - 1.5, 3, 3); } }
   const out = outsideSamples(); c.fillStyle = '#ff2020';
   for (let i = 0; i < out.length && i < 600; i++) { const [sx, sy] = cmToScr(out[i][0], out[i][1]); c.fillRect(sx - 1.5, sy - 1.5, 3, 3); }
   if (mode === 'bone') {
@@ -437,8 +507,10 @@ function paint() {
     if (sel) { const q = pivotOf(sel), [sx, sy] = cmToScr(q[0], q[1]); c.beginPath(); c.arc(sx, sy, 9, 0, 6.3); c.strokeStyle = '#ffd84a'; c.lineWidth = 2.5; c.stroke(); c.beginPath(); c.arc(sx, sy, 2.5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); }
   }
   const nl = sel ? effLinks(sel).size : 0, kids = $('withKids').checked ? ' (mit Anhang)' : ' (nur dieser Knochen)';
-  const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen oder oben wählen. ' : boneAct === 'move' ? `${sel}: ziehen = verschieben${kids}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Ring drehen${kids}. ` : boneAct === 'scale' ? `${sel}: ziehen = größer/kleiner (vom Ring aus)${kids}. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
-  $('status').textContent = draftNote + (mode === 'align' ? 'Ausrichten: ziehen = Ebene schieben; Pfeile fein. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : hintBone) + (out.length ? `Rot: ${out.length} Knochen-/Organpunkte ragen aus der Haut.` : '');
+  const hintOrg = !selOrg ? 'Innerei antippen oder oben wählen. ' : orgAct === 'move' ? `${selOrg}: ziehen = verschieben. ` : orgAct === 'rot' ? `${selOrg}: ziehen = um die Mitte drehen. ` : `${selOrg}: ziehen = größer/kleiner (${$('oLen').checked && $('oWid').checked ? 'gleichmäßig' : $('oLen').checked ? 'nur Länge' : $('oWid').checked ? 'nur Breite' : 'nichts gewählt'}). `;
+  const lw = $('kLen').checked && $('kWid').checked ? '' : $('kLen').checked ? ' (nur Länge)' : $('kWid').checked ? ' (nur Breite)' : ' (nichts gewählt)';
+  const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen oder oben wählen. ' : boneAct === 'move' ? `${sel}: ziehen = verschieben${kids}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Ring drehen${kids}. ` : boneAct === 'scale' ? `${sel}: ziehen = größer/kleiner (vom Ring aus)${lw}${kids}. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
+  $('status').textContent = draftNote + (mode === 'align' ? 'Ausrichten: ziehen = Ebene schieben; Pfeile fein. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : mode === 'organ' ? hintOrg : hintBone) + (out.length ? `Rot: ${out.length} Knochen-/Organpunkte ragen aus der Haut.` : '');
   $('alignInfo').textContent = `Maßstab ${(align.s / align.s0 * 100).toFixed(1)}% · Drehung ${align.r.toFixed(2)}°${align.mx ? ' · Daumen gespiegelt' : ''}${align.my ? ' · umgedreht' : ''}`;
   $('arot').value = Math.max(-180, Math.min(180, align.r)); $('mAx').classList.toggle('sel', !!align.mx); $('mLn').classList.toggle('sel', !!align.my);
 }
@@ -485,6 +557,10 @@ cv.addEventListener('pointerdown', (e) => {
     const hit = pickBone(x, y);
     if (hit) { sel = hit; $('boneSel').value = hit; pushUndo(); drag = { kind: boneAct === 'rot' ? 'rot' : boneAct === 'scale' ? 'scale' : boneAct === 'move' ? 'bone' : 'pan', last: p }; } else drag = { kind: 'pan', last: p };
     draw();
+  } else if (mode === 'organ') {
+    const [x, y] = scrToCm(p[0], p[1]), hit = pickOrgan(x, y);
+    if (hit) { selOrg = hit; $('orgSel').value = hit; pushUndo(); drag = { kind: orgAct === 'rot' ? 'orot' : orgAct === 'scale' ? 'oscale' : 'omove', last: p }; } else drag = { kind: 'pan', last: p };
+    draw();
   } else if (mode === 'align') drag = { kind: 'align', last: p };
   else drag = { kind: 'pan', last: p };
 });
@@ -499,7 +575,13 @@ cv.addEventListener('pointermove', (e) => {
   else if (drag.kind === 'align') { align.tx += (p[0] - drag.last[0]) / view.z; align.ty += (p[1] - drag.last[1]) / view.z; drag.last = p; alignTouch(); }
   else if (drag.kind === 'bone' && sel) { const k = K(), d = scrToCm(p[0], p[1]), d0 = scrToCm(drag.last[0], drag.last[1]); void k; for (const n of group()) moveBody(n, 0, 1, [0, 0], [d[0] - d0[0], d[1] - d0[1]]); drag.last = p; dirty = true; saveDraft(); }
   else if (drag.kind === 'rot' && sel) { const q = pivotOf(sel), qs = cmToScr(q[0], q[1]); const a1 = Math.atan2(drag.last[1] - qs[1], drag.last[0] - qs[0]), a2 = Math.atan2(p[1] - qs[1], p[0] - qs[0]); let phi = a2 - a1; if (phi > Math.PI) phi -= 2 * Math.PI; if (phi < -Math.PI) phi += 2 * Math.PI; for (const n of group()) moveBody(n, phi, 1, q, [0, 0]); drag.last = p; dirty = true; saveDraft(); }
-  else if (drag.kind === 'scale' && sel) { const q = pivotOf(sel), qs = cmToScr(q[0], q[1]); const d1 = Math.hypot(drag.last[0] - qs[0], drag.last[1] - qs[1]) || 1, d2 = Math.hypot(p[0] - qs[0], p[1] - qs[1]); const k = Math.max(0.5, Math.min(2, d2 / d1)); for (const n of group()) moveBody(n, 0, k, q, [0, 0]); drag.last = p; dirty = true; saveDraft(); }
+  else if (drag.kind === 'omove' && selOrg) { const d = scrToCm(p[0], p[1]), d0 = scrToCm(drag.last[0], drag.last[1]), t = orgT(selOrg); t[0] += d[0] - d0[0]; t[1] += d[1] - d0[1]; drag.last = p; dirty = true; saveDraft(); }
+  else if (drag.kind === 'orot' && selOrg) { const def = info.organDefs.find((q) => q.name === selOrg), cc = orgNow(def), qs = cmToScr(cc[0], cc[1]); const a1 = Math.atan2(drag.last[1] - qs[1], drag.last[0] - qs[0]), a2 = Math.atan2(p[1] - qs[1], p[0] - qs[0]); let phi = a2 - a1; if (phi > Math.PI) phi -= 2 * Math.PI; if (phi < -Math.PI) phi += 2 * Math.PI; orgT(selOrg)[2] += (phi * 180) / Math.PI; drag.last = p; dirty = true; saveDraft(); }
+  else if (drag.kind === 'oscale' && selOrg) { const def = info.organDefs.find((q) => q.name === selOrg), cc = orgNow(def), qs = cmToScr(cc[0], cc[1]); const d1 = Math.hypot(drag.last[0] - qs[0], drag.last[1] - qs[1]) || 1, d2 = Math.hypot(p[0] - qs[0], p[1] - qs[1]), k = Math.max(0.5, Math.min(2, d2 / d1)), t = orgT(selOrg); if ($('oWid').checked) t[3] *= k; if ($('oLen').checked) t[4] *= k; drag.last = p; dirty = true; saveDraft(); }
+  else if (drag.kind === 'scale' && sel) { const q = pivotOf(sel), qs = cmToScr(q[0], q[1]); const d1 = Math.hypot(drag.last[0] - qs[0], drag.last[1] - qs[1]) || 1, d2 = Math.hypot(p[0] - qs[0], p[1] - qs[1]); const k = Math.max(0.5, Math.min(2, d2 / d1)), kl = $('kLen').checked ? k : 1, kw = $('kWid').checked ? k : 1;
+    if (kl === kw) { if (kl !== 1) for (const n of group()) moveBody(n, 0, k, q, [0, 0]); }
+    else { const bt = T[sel], axis = (BN[sel].ang || 0) + (bt ? (bt[2] * Math.PI) / 180 : 0); for (const n of group()) scaleAniso(n, kl, kw, q, axis, n === sel); }
+    drag.last = p; dirty = true; saveDraft(); }
   draw();
 });
 const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
@@ -511,9 +593,17 @@ cv.addEventListener('dblclick', (e) => {
 });
 cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); (mode === 'align' ? zoomAlign : zoomView)(e.deltaY < 0 ? 1.1 : 1 / 1.1, p[0], p[1]); draw(); }, { passive: false });
 
-function setMode(m) { mode = m; for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone']]) $(id).classList.toggle('sel', m === mm); $('boneRow').style.display = m === 'bone' ? '' : 'none'; $('fineRow').style.display = m === 'align' ? '' : 'none'; resize(); }
-function setAct(a) { boneAct = a; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bScale', 'scale'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); draw(); }
-$('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone');
+function setMode(m) {
+  mode = m; for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone'], ['mOrgan', 'organ']]) $(id).classList.toggle('sel', m === mm);
+  $('alignRows').style.display = m === 'align' ? '' : 'none'; $('formRows').style.display = m === 'form' ? '' : 'none'; $('boneRows').style.display = m === 'bone' ? '' : 'none'; $('organRows').style.display = m === 'organ' ? '' : 'none';
+  $('alignSliders').style.display = m === 'align' ? '' : 'none'; resize();
+}
+function setAct(a) { boneAct = a; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bScale', 'scale'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); $('kScale').style.display = a === 'scale' ? '' : 'none'; draw(); }
+function setOrgAct(a) { orgAct = a; for (const [id, aa] of [['oMove', 'move'], ['oRot', 'rot'], ['oScale', 'scale']]) $(id).classList.toggle('sel', a === aa); $('oScaleOpts').style.display = a === 'scale' ? '' : 'none'; draw(); }
+$('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone'); $('mOrgan').onclick = () => setMode('organ');
+$('oMove').onclick = () => setOrgAct('move'); $('oRot').onclick = () => setOrgAct('rot'); $('oScale').onclick = () => setOrgAct('scale');
+$('orgSel').onchange = () => { selOrg = $('orgSel').value || null; draw(); };
+$('resetOrgans').onclick = () => { pushUndo(); O = {}; selOrg = null; changed(); };
 $('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link');
 $('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
 $('bFree').onclick = () => { if (!sel) return; pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
@@ -531,12 +621,12 @@ $('alpha').addEventListener('input', draw);
 $('arot').addEventListener('input', () => { rotAlign(+$('arot').value - align.r, cw / 2, ch / 2); draw(); });
 $('mAx').onclick = () => { align.mx = !align.mx; skinCache = null; alignTouch(); draw(); };
 $('mLn').onclick = () => { align.my = !align.my; skinCache = null; alignTouch(); draw(); };
-for (const id of ['showBones', 'showAll', 'protect', 'showThreads', 'withKids', 'showSkin']) $(id).addEventListener('change', draw);
+for (const id of ['showBones', 'showAll', 'protect', 'showThreads', 'withKids', 'showSkin', 'showOrgans', 'kLen', 'kWid', 'oLen', 'oWid']) $(id).addEventListener('change', draw);
 $('solo').addEventListener('change', () => { fitAlign(); draw(); });
 $('keepRef').addEventListener('change', () => { if ($('keepRef').checked) saveRef(); else if (info) kvDel('ref/' + info.kind); });
 $('menu').onclick = () => { $('drawer').classList.toggle('open'); resize(); };
 $('menuClose').onclick = () => { $('drawer').classList.remove('open'); resize(); };
-$('info').textContent = 'Ablauf: Referenzbild laden, mit „1 Ausrichten“ die Figur-Ebene ans Bild anpassen (ziehen, Pfeile, Maßstab, Drehung), dann in „2 Form“ die Punkte ziehen. „3 Knochen“: Knochen antippen/wählen, verschieben, drehen oder skalieren (Ring = Drehpunkt), „mit Anhang“ nimmt angehängte Knochen mit; „Fäden“ zeigt, wo die Haut am Knochen hängt. „Prüfen“ sucht Mängel und kann sie korrigieren (↶ macht es rückgängig). Bei jedem Teil getrennt ausrichten = zum Texturieren entkoppelt. „Übernehmen“ legt auch die Haut aus dem Referenzbild auf die Figur. Alles wird laufend als Entwurf gesichert.';
+$('info').textContent = 'Aufbau: 1 Ausrichten = Referenzbild laden und die Figur-Ebene (Umriss, Knochen, Innereien) darüberlegen; ändert die Figur nicht. 2 Form = Umriss-Punkte ziehen. 3 Knochen = Knochen verschieben, drehen, skalieren (Länge/Breite getrennt wählbar) und Haut-Fäden lösen/setzen. 4 Innereien = Organe verschieben, drehen, skalieren. Jede Ansicht hat ihre Optionen direkt darunter. „Prüfen“ sucht Mängel und korrigiert sie auf Wunsch (↶ macht es rückgängig). „Übernehmen“ speichert fest, legt die Haut aus dem Referenzbild auf die Figur und startet neu. Alles wird laufend als Entwurf gesichert.';
 $('rot').addEventListener('change', () => { rot = +$('rot').value; try { localStorage.setItem('zd_form_rot', String(rot)); } catch (e) {} resize(); fitView(); draw(); });
 try { const r0 = localStorage.getItem('zd_form_rot'); if (r0 === '90' || r0 === '-90') { rot = +r0; $('rot').value = r0; } } catch (e) {}
 $('allowBones').addEventListener('change', () => { if ($('allowBones').checked) setMode('bone'); draw(); });
@@ -551,7 +641,7 @@ $('undo').onclick = undo; $('redo').onclick = redo;
 window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); } });
 $('check').onclick = () => { if (info) showCheck(); };
 $('resetPart').onclick = () => { pushUndo(); const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
-$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; links = {}; clearDraft(info.kind); resetSkins = true; changed(); };
+$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
 $('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; changed(); };
 $('resetLinks').onclick = () => { pushUndo(); if (sel) delete links[sel]; else links = {}; changed(); };
 let resetSkins = false;
@@ -571,7 +661,6 @@ $('taCopy').onclick = () => { $('ta').select(); try { navigator.clipboard.writeT
 $('taLoad').onclick = () => post({ zdForm: 'import', text: $('ta').value, kind: info ? info.kind : 'zombie' });
 function post(m) { if (EMB) window.parent.postMessage(m, '*'); }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormInfo) return; if (d.error) { $('taInfo').textContent = d.error; return; } setInfo(d).then(() => $('ovl').classList.remove('open')); });
-$('fineRow').style.display = '';
 resize(); fitView();
 post({ zdForm: 'ready' });
 </script>
