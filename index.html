@@ -71,6 +71,9 @@
       #envpop .opts { display: flex; flex-wrap: wrap; gap: 6px; }
       #envpop button { background: #2a2222; color: #ddd; border: 1px solid #4a4040; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
       #envpop button.sel { background: #7a1318; border-color: #c4373e; color: #fff; }
+      #formframe { display: none; position: fixed; inset: 0; z-index: 30; background: #141010; }
+      #formframe.open { display: block; }
+      #formframe iframe { width: 100%; height: 100%; border: 0; }
       #texframe { display: none; position: fixed; inset: 0; z-index: 30; background: #141010; }
       #texframe.open { display: block; }
       #texframe iframe { width: 100%; height: 100%; border: 0; }
@@ -115,7 +118,7 @@
       #shopthumb { position: absolute; left: 0; right: 0; border-radius: 5px; background: #c4373e; }
       #shop .done { margin-top: 14px; width: 100%; position: sticky; bottom: 0; }
     </style>
-    <script type="module" crossorigin src="./assets/index-BenGFQdE.js"></script>
+    <script type="module" crossorigin src="./assets/index-EAPDrKEU.js"></script>
   </head>
   <body>
     <div id="loading"><div class="box"><span id="ldtxt">Lädt …</span><div class="bar"><i></i></div></div></div>
@@ -152,6 +155,7 @@
       <button id="shopbtn" data-ic="shirt"><span>Kleidung</span></button>
       <button id="bloodbtn" data-ic="blood"><span>Blut</span></button>
       <button id="texbtn" data-ic="texture"><span>Texturen</span></button>
+      <button id="formbtn" data-ic="shape"><span>Form-Editor</span></button>
       <button id="gutbtn" data-ic="blood"><span>Darm-Info</span></button>
       <button id="photobtn" data-ic="texture"><span>Foto-Haut</span></button>
       <div class="mver" id="mver"></div>
@@ -168,6 +172,7 @@
     <div id="pwmodal"></div>
     <div id="arenapop" class="pop"></div>
     <div id="envpop" class="pop"></div>
+    <div id="formframe"><iframe id="formiframe" title="Form-Editor"></iframe></div>
     <div id="texframe"><iframe id="texiframe" title="Texturen-Editor"></iframe></div>
     <div id="addpop" class="pop"></div>
     <div id="shop" class="pop"></div>

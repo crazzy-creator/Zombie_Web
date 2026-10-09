@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Form-Editor</title>
+<style>
+  html,body{margin:0;height:100%;background:#141010;color:#e6dcdc;font-family:system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
+  #app{display:flex;flex-direction:column;height:100%}
+  header{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px;padding-top:calc(6px + max(env(safe-area-inset-top), var(--top, 0px)));padding-left:max(6px, env(safe-area-inset-left));padding-right:max(6px, env(safe-area-inset-right));background:#1c1616;border-bottom:1px solid #3a2e2e}
+  header h1{font-size:15px;margin:0 8px 0 2px}
+  button,select,label.btn{background:#2a2222;color:#ddd;border:1px solid #4a4040;border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer}
+  button.sel,button.main{background:#7a1318;border-color:#c4373e;color:#fff}
+  main{flex:1;display:flex;flex-direction:column;padding:6px;gap:6px;min-height:0}
+  .box{flex:1;min-height:0;background:#0c0909;border:1px solid #3a2e2e;border-radius:10px;position:relative;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+  input[type=range]{accent-color:#c4373e;width:110px}
+  .hint{font-size:12px;color:#a89898}
+  #ovl{position:absolute;inset:0;background:rgba(10,8,8,.95);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
+  #ovl.open{display:flex}
+  #ovl textarea{flex:1;background:#0c0909;color:#ddd;border:1px solid #4a4040;border-radius:8px;font-size:12px;padding:8px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Form-Editor</h1>
+    <select id="kind"></select>
+    <select id="part"></select>
+    <label class="btn">Referenzbild<input id="file" type="file" accept="image/*" style="display:none"></label>
+    <button id="apply" class="main">Übernehmen</button>
+    <button id="resetPart">Teil zurücksetzen</button>
+    <button id="resetAll">Figur zurücksetzen</button>
+    <button id="xfer">Export / Import</button>
+    <button id="close" style="display:none">Schließen</button>
+  </header>
+  <main>
+    <div class="row">
+      <button id="mAlign" class="sel">1 Ausrichten</button>
+      <button id="mForm">2 Form</button>
+      <button id="mBone">3 Knochen</button>
+      <label>Zoom <input id="zoom" type="range" min="0.25" max="6" step="0.01" value="1"></label>
+      <label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
+      <label>Bild <input id="alpha" type="range" min="0" max="1" step="0.02" value="0.85"></label>
+    </div>
+    <div class="box"><canvas id="cv"></canvas><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
+    <div class="row">
+      <label><input id="showBones" type="checkbox" checked> Knochen zeigen</label>
+      <label><input id="showAll" type="checkbox" checked> alle Teile zeigen</label>
+      <label><input id="protect" type="checkbox" checked> Schutzabstand zu Knochen</label>
+      <label><input id="allowBones" type="checkbox"> Knochen verschiebbar</label>
+      <button id="resetBones">Knochen zurücksetzen</button>
+    </div>
+    <div class="row"><span class="hint" id="info"></span></div>
+  </main>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const EMB = window.parent !== window;
+const topQ = new URLSearchParams(location.search).get('top');
+if (topQ) document.documentElement.style.setProperty('--top', Math.max(0, +topQ || 0) + 'px');
+if (EMB) $('close').style.display = '';
+const KINDS = [['zombie', 'Zombie'], ['fat', 'Fetter Zombie'], ['alien', 'Alien'], ['robot', 'Roboter']];
+const PARTS = [['torso', 'Rumpf + Kopf'], ['armN', 'Arm vorn'], ['armF', 'Arm hinten'], ['beinN', 'Bein vorn'], ['beinF', 'Bein hinten']];
+for (const [id, l] of KINDS) $('kind').add(new Option(l, id));
+for (const [id, l] of PARTS) $('part').add(new Option(l, id));
+const S0 = 8;              // Pixel je cm in Bildkoordinaten bei Figur-Ebene = 1
+const MARGIN = 1.3;        // cm Schutzabstand der Haut zu Knochen/Organen
+const cv = $('cv'), c = cv.getContext('2d');
+let info = null, allText = '', work = {}, boneOff = {};
+let mode = 'align', ref = null;
+let view = { z: 1, px: 0, py: 0 }, fitZ = 1;
+let align = { s: 1, tx: 0, ty: 0 }, alignS0 = 1;
+const aligns = {};
+let sel = null;            // gewählter Knochen
+let samples = null, grid = null; // Schutzpunkte für das gewählte Teil
+let dirty = true;
+let cw = 800, ch = 500, dpr = 1;
+
+function resize() { const r = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1; cw = r.width; ch = r.height; cv.width = Math.max(10, Math.round(cw * dpr)); cv.height = Math.max(10, Math.round(ch * dpr)); draw(); }
+window.addEventListener('resize', resize);
+
+// ---------- Koordinaten ----------
+const K = () => S0 * align.s * view.z;
+const cmToScr = (x, y) => { const k = K(); return [x * k + align.tx * view.z + view.px, y * k + align.ty * view.z + view.py]; };
+const scrToCm = (sx, sy) => { const k = K(); return [(sx - align.tx * view.z - view.px) / k, (sy - align.ty * view.z - view.py) / k]; };
+const scrToImg = (sx, sy) => [(sx - view.px) / view.z, (sy - view.py) / view.z];
+
+// ---------- Daten ----------
+const bonesByName = () => { const m = {}; for (const b of info.bones) m[b.name] = b; return m; };
+let BN = {};
+function cumOff(name, memo) {
+  if (memo[name]) return memo[name];
+  const b = BN[name]; const own = boneOff[name] || [0, 0];
+  const p = b && b.parent ? cumOff(b.parent, memo) : [0, 0];
+  return (memo[name] = [p[0] + own[0], p[1] + own[1]]);
+}
+const subtree = (name) => { const s = new Set([name]); let ch2 = true; while (ch2) { ch2 = false; for (const b of info.bones) if (b.parent && s.has(b.parent) && !s.has(b.name)) { s.add(b.name); ch2 = true; } } return s; };
+
+function setInfo(msg) {
+  info = msg.info; allText = msg.allText || ''; BN = bonesByName();
+  work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
+  boneOff = {}; const cb = (msg.custom && msg.custom.bones) || {}; for (const k in cb) boneOff[k] = cb[k].slice();
+  $('kind').value = info.kind; sel = null; dirty = true;
+  fitAlign(); updateInfo(); draw();
+}
+
+function bboxOf(pts) { const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; }
+function fitAlign() {
+  const key = info.kind + '/' + $('part').value;
+  const spaceW = ref ? ref.width : cw / view.z, spaceH = ref ? ref.height : ch / view.z;
+  if (aligns[key]) { align = aligns[key]; alignS0 = align.s0; $('asc').value = align.s / align.s0; return; }
+  const b = bboxOf(work[$('part').value]);
+  const s = (spaceH * 0.7) / ((b[3] - b[1]) * S0);
+  align = { s, s0: s, tx: spaceW / 2 - ((b[0] + b[2]) / 2) * S0 * s, ty: spaceH / 2 - ((b[1] + b[3]) / 2) * S0 * s };
+  aligns[key] = align; alignS0 = s; $('asc').value = 1;
+}
+function fitView() {
+  if (ref) { fitZ = Math.min(cw / ref.width, ch / ref.height) * 0.96; view.z = fitZ; view.px = (cw - ref.width * fitZ) / 2; view.py = (ch - ref.height * fitZ) / 2; }
+  else { fitZ = 1; view = { z: 1, px: 0, py: 0 }; }
+  $('zoom').value = 1;
+}
+
+// ---------- Schutzpunkte ----------
+function buildSamples() {
+  const part = $('part').value; samples = []; const memo = {};
+  for (const b of info.bones) {
+    if (b.group !== part || /^schulter/.test(b.name)) continue;
+    const off = cumOff(b.name, memo), mg = /^(schaedel|kiefer)/.test(b.name) ? 0.4 : MARGIN;
+    for (const t of b.tris) {
+      if (t[9] === 5) continue;
+      const q = [[t[0] + off[0], t[1] + off[1]], [t[2] + off[0], t[3] + off[1]], [t[4] + off[0], t[5] + off[1]]];
+      for (let e = 0; e < 3; e++) { const a = q[e], d = q[(e + 1) % 3], n = Math.max(1, Math.ceil(Math.hypot(d[0] - a[0], d[1] - a[1]) / 0.6)); for (let i = 0; i <= n; i++) samples.push([a[0] + (d[0] - a[0]) * i / n, a[1] + (d[1] - a[1]) * i / n, mg]); }
+    }
+  }
+  if (part === 'torso') for (const [x, y] of info.organs) samples.push([x, y, MARGIN]);
+  grid = new Map(); for (const s of samples) { const k = Math.floor(s[0] / 2) + ',' + Math.floor(s[1] / 2); (grid.get(k) || grid.set(k, []).get(k)).push(s); }
+  dirty = false;
+}
+function pushOut(p) {
+  if (dirty || !grid) buildSamples();
+  for (let it = 0; it < 3; it++) {
+    const gx = Math.floor(p[0] / 2), gy = Math.floor(p[1] / 2); let moved = false;
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const s of (grid.get((gx + a) + ',' + (gy + b)) || [])) {
+      const dx = p[0] - s[0], dy = p[1] - s[1], d = Math.hypot(dx, dy);
+      if (d < s[2]) { const k = d < 1e-6 ? 1 : s[2] / d; p[0] = s[0] + (d < 1e-6 ? s[2] : dx * k); p[1] = s[1] + (d < 1e-6 ? 0 : dy * k); moved = true; }
+    }
+    if (!moved) break;
+  }
+}
+function inPoly(x, y, poly) { let r = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) r = !r; } return r; }
+function outsideSamples() { if (dirty || !grid) buildSamples(); const poly = work[$('part').value]; return samples.filter((s) => !inPoly(s[0], s[1], poly)); }
+
+// ---------- Zeichnen ----------
+let raf = 0;
+function draw() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; paint(); }); }
+function path(poly) { c.beginPath(); poly.forEach(([x, y], i) => { const [sx, sy] = cmToScr(x, y); i ? c.lineTo(sx, sy) : c.moveTo(sx, sy); }); c.closePath(); }
+function paint() {
+  c.setTransform(dpr, 0, 0, dpr, 0, 0); c.fillStyle = '#0c0909'; c.fillRect(0, 0, cw, ch);
+  if (ref) { c.globalAlpha = +$('alpha').value; c.drawImage(ref, view.px, view.py, ref.width * view.z, ref.height * view.z); c.globalAlpha = 1; }
+  if (!info) { c.fillStyle = '#6a5a5a'; c.font = '15px system-ui'; c.textAlign = 'center'; c.fillText('Lädt …', cw / 2, ch / 2); return; }
+  const part = $('part').value, k = K(), memo = {};
+  // Knochen
+  if ($('showBones').checked) {
+    const subs = sel ? subtree(sel) : null, poly = work[part];
+    const order = [...info.bones].sort((a, b) => 0);
+    for (let layer = 0; layer < 5; layer++) for (const b of order) {
+      const off = cumOff(b.name, memo), hl = subs && subs.has(b.name);
+      c.globalAlpha = mode === 'form' || mode === 'align' ? 0.5 : 0.85;
+      for (const t of b.tris) {
+        if (t[9] !== layer) continue;
+        const a = cmToScr(t[0] + off[0], t[1] + off[1]), bb = cmToScr(t[2] + off[0], t[3] + off[1]), cc = cmToScr(t[4] + off[0], t[5] + off[1]);
+        c.fillStyle = hl ? `rgb(${Math.min(255, t[6] + 50)},${Math.min(255, t[7] + 40)},${t[8] * 0.4})` : `rgb(${t[6]},${t[7]},${t[8]})`;
+        c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(bb[0], bb[1]); c.lineTo(cc[0], cc[1]); c.closePath(); c.fill();
+      }
+    }
+    c.globalAlpha = 1;
+  }
+  // Umrisse
+  for (const [p] of PARTS) {
+    if (p === part) continue;
+    if (!$('showAll').checked) continue;
+    path(work[p]); c.strokeStyle = 'rgba(160,200,160,.55)'; c.lineWidth = 1.2; c.stroke();
+  }
+  // Grundform (gestrichelt) und aktuelle Form des gewählten Teils
+  c.setLineDash([5, 4]); path(info.base[part]); c.strokeStyle = 'rgba(200,200,200,.5)'; c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
+  path(work[part]); c.fillStyle = 'rgba(255,60,60,.12)'; c.fill(); c.strokeStyle = '#ff5050'; c.lineWidth = 2; c.stroke();
+  if (mode === 'form') for (const [x, y] of work[part]) { const [sx, sy] = cmToScr(x, y); c.beginPath(); c.arc(sx, sy, 5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); c.strokeStyle = '#a00'; c.lineWidth = 1; c.stroke(); }
+  // Knochen, die aus der Haut ragen
+  const out = outsideSamples(); c.fillStyle = '#ff2020';
+  for (let i = 0; i < out.length && i < 600; i++) { const [sx, sy] = cmToScr(out[i][0], out[i][1]); c.fillRect(sx - 1.5, sy - 1.5, 3, 3); }
+  if (mode === 'bone') for (const j of info.joints) { const o = cumOff(BN[j.b] && BN[j.a] && (depthOf(j.a) > depthOf(j.b) ? j.a : j.b), memo); const [sx, sy] = cmToScr(j.x + o[0], j.y + o[1]); c.beginPath(); c.arc(sx, sy, 3, 0, 6.3); c.fillStyle = '#ffd84a'; c.fill(); }
+  $('info').textContent = (mode === 'align' ? 'Ausrichten: Figur-Ebene verschieben/vergrößern, die Figur selbst ändert sich nicht. ' : mode === 'form' ? 'Form: weiße Punkte ziehen, auf die Linie tippen = Punkt hinzufügen, Doppeltipp = löschen. Leer ziehen = Ansicht schieben. ' : ($('allowBones').checked ? 'Knochen: antippen und ziehen, Gelenke und angehängte Knochen wandern mit. ' : 'Knochen sind gesperrt: „Knochen verschiebbar“ einschalten. ')) + (out.length ? `Rote Punkte: ${out.length} Knochenpunkte ragen aus der Haut.` : '');
+}
+const depthMemo = {};
+function depthOf(n) { let d = 0, b = BN[n]; while (b && b.parent) { d++; b = BN[b.parent]; } return d; }
+
+// ---------- Bedienung ----------
+const ptrs = new Map(); let drag = null, pinch = null;
+const pos = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+function zoomView(f, cx, cy) { const nz = Math.min(fitZ * 8, Math.max(fitZ * 0.2, view.z * f)); f = nz / view.z; view.px = cx - (cx - view.px) * f; view.py = cy - (cy - view.py) * f; view.z = nz; $('zoom').value = Math.min(6, Math.max(0.25, view.z / fitZ)); }
+function zoomAlign(f, cx, cy) { const [ix, iy] = scrToImg(cx, cy); const ns = Math.min(alignS0 * 3, Math.max(alignS0 * 0.3, align.s * f)); f = ns / align.s; align.tx = ix - (ix - align.tx) * f; align.ty = iy - (iy - align.ty) * f; align.s = ns; $('asc').value = align.s / alignS0; }
+cv.addEventListener('pointerdown', (e) => {
+  if (!info) return; const p = pos(e); ptrs.set(e.pointerId, p); cv.setPointerCapture(e.pointerId); e.preventDefault();
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; drag = null; return; }
+  const part = $('part').value;
+  if (mode === 'form') {
+    const pts = work[part]; let bi = -1, bd = 15;
+    pts.forEach(([x, y], i) => { const [sx, sy] = cmToScr(x, y); const d = Math.hypot(sx - p[0], sy - p[1]); if (d < bd) { bd = d; bi = i; } });
+    if (bi < 0) {
+      let be = -1, bt = 0, bdist = 11; const n = pts.length;
+      for (let i = 0; i < n; i++) { const a = cmToScr(...pts[i]), b = cmToScr(...pts[(i + 1) % n]); const vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy || 1; const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l2)); const d = Math.hypot(a[0] + vx * t - p[0], a[1] + vy * t - p[1]); if (d < bdist) { bdist = d; be = i; bt = t; } }
+      if (be >= 0) { const a = pts[be], b = pts[(be + 1) % n]; pts.splice(be + 1, 0, [a[0] + (b[0] - a[0]) * bt, a[1] + (b[1] - a[1]) * bt]); bi = be + 1; }
+    }
+    drag = bi >= 0 ? { kind: 'pt', i: bi } : { kind: 'pan', last: p };
+  } else if (mode === 'bone' && $('allowBones').checked) {
+    const [x, y] = scrToCm(p[0], p[1]); const memo = {}; let best = null, bl = -1;
+    info.bones.forEach((b, bi) => { const off = cumOff(b.name, memo); for (const t of b.tris) { if (t[9] === 5) continue; if (inTri(x - off[0], y - off[1], t) && t[9] * 1000 + bi >= bl) { bl = t[9] * 1000 + bi; best = b.name; } } });
+    sel = best; drag = best ? { kind: 'bone', last: p } : { kind: 'pan', last: p }; draw();
+  } else if (mode === 'align') drag = { kind: 'align', last: p };
+  else drag = { kind: 'pan', last: p };
+});
+function inTri(x, y, t) { const d1 = (x - t[2]) * (t[1] - t[3]) - (t[0] - t[2]) * (y - t[3]), d2 = (x - t[4]) * (t[3] - t[5]) - (t[2] - t[4]) * (y - t[5]), d3 = (x - t[0]) * (t[5] - t[1]) - (t[4] - t[0]) * (y - t[1]); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); }
+cv.addEventListener('pointermove', (e) => {
+  if (!ptrs.has(e.pointerId)) return; const p = pos(e); ptrs.set(e.pointerId, p);
+  if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; const f = d / (pinch.d || 1); if (mode === 'align') { zoomAlign(f, mx, my); align.tx += (mx - pinch.mx) / view.z; align.ty += (my - pinch.my) / view.z; } else { zoomView(f, mx, my); view.px += mx - pinch.mx; view.py += my - pinch.my; } pinch = { d, mx, my }; draw(); return; }
+  if (!drag) return;
+  const part = $('part').value;
+  if (drag.kind === 'pt') { const [x, y] = scrToCm(p[0], p[1]); const q = [x, y]; if ($('protect').checked) pushOut(q); work[part][drag.i] = q; }
+  else if (drag.kind === 'pan') { view.px += p[0] - drag.last[0]; view.py += p[1] - drag.last[1]; drag.last = p; }
+  else if (drag.kind === 'align') { align.tx += (p[0] - drag.last[0]) / view.z; align.ty += (p[1] - drag.last[1]) / view.z; drag.last = p; }
+  else if (drag.kind === 'bone' && sel) { const k = K(); const o = boneOff[sel] || (boneOff[sel] = [0, 0]); o[0] += (p[0] - drag.last[0]) / k; o[1] += (p[1] - drag.last[1]) / k; drag.last = p; dirty = true; }
+  draw();
+});
+const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) { if (drag && drag.kind === 'bone') updateInfo(); drag = null; } draw(); };
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+cv.addEventListener('dblclick', (e) => {
+  if (mode !== 'form' || !info) return; const p = pos(e), pts = work[$('part').value]; if (pts.length <= 6) return;
+  let bi = -1, bd = 15; pts.forEach(([x, y], i) => { const [sx, sy] = cmToScr(x, y); const d = Math.hypot(sx - p[0], sy - p[1]); if (d < bd) { bd = d; bi = i; } });
+  if (bi >= 0) { pts.splice(bi, 1); draw(); }
+});
+cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); (mode === 'align' ? zoomAlign : zoomView)(e.deltaY < 0 ? 1.1 : 1 / 1.1, p[0], p[1]); draw(); }, { passive: false });
+
+function setMode(m) { mode = m; for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone']]) $(id).classList.toggle('sel', m === mm); draw(); }
+$('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone');
+$('zoom').addEventListener('input', () => { const nz = fitZ * +$('zoom').value, f = nz / view.z; zoomView(f, cw / 2, ch / 2); draw(); });
+$('asc').addEventListener('input', () => { const ns = alignS0 * +$('asc').value; zoomAlign(ns / align.s, cw / 2, ch / 2); draw(); });
+$('alpha').addEventListener('input', draw);
+for (const id of ['showBones', 'showAll', 'protect']) $(id).addEventListener('change', draw);
+$('allowBones').addEventListener('change', () => { if ($('allowBones').checked) setMode('bone'); draw(); });
+$('part').addEventListener('change', () => { dirty = true; fitAlign(); draw(); });
+$('kind').addEventListener('change', () => post({ zdForm: 'need', kind: $('kind').value }));
+$('file').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const url = URL.createObjectURL(f), im = new Image(); im.onload = () => { ref = im; for (const k in aligns) delete aligns[k]; fitView(); fitAlign(); draw(); }; im.src = url; };
+function updateInfo() { dirty = true; draw(); }
+$('resetPart').onclick = () => { const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); draw(); };
+$('resetAll').onclick = () => { for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); boneOff = {}; dirty = true; draw(); };
+$('resetBones').onclick = () => { boneOff = {}; sel = null; dirty = true; draw(); };
+$('apply').onclick = () => {
+  const data = { outlines: {}, bones: {} };
+  for (const [p] of PARTS) if (JSON.stringify(work[p].map((q) => q.map((v) => Math.round(v * 100) / 100))) !== JSON.stringify(info.base[p])) data.outlines[p] = work[p].map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]);
+  for (const k in boneOff) if (Math.abs(boneOff[k][0]) > 0.005 || Math.abs(boneOff[k][1]) > 0.005) data.bones[k] = [Math.round(boneOff[k][0] * 100) / 100, Math.round(boneOff[k][1] * 100) / 100];
+  post({ zdForm: 'save', kind: info.kind, data });
+};
+$('close').onclick = () => post({ zdForm: 'close' });
+$('xfer').onclick = () => { $('ta').value = allText; $('taInfo').textContent = 'Text kopieren und sichern – oder einen gesicherten Text hier einfügen und „Einlesen“ drücken.'; $('ovl').classList.add('open'); };
+$('taClose').onclick = () => $('ovl').classList.remove('open');
+$('taCopy').onclick = () => { $('ta').select(); try { navigator.clipboard.writeText($('ta').value); } catch (e) { document.execCommand('copy'); } };
+$('taLoad').onclick = () => post({ zdForm: 'import', text: $('ta').value, kind: info ? info.kind : 'zombie' });
+function post(m) { if (EMB) window.parent.postMessage(m, '*'); }
+window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormInfo) return; if (d.error) { $('taInfo').textContent = d.error; return; } setInfo(d); $('ovl').classList.remove('open'); });
+resize(); fitView();
+post({ zdForm: 'ready' });
+</script>
+</body>
+</html>
