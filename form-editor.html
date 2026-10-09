@@ -57,10 +57,10 @@
   </div>
   <main>
     <div class="row">
-      <button id="mAlign" class="sel">1 Ausrichten</button>
+      <button id="mBone" class="sel">1 Knochen</button>
       <button id="mForm">2 Form</button>
-      <button id="mBone">3 Knochen</button>
-      <button id="mOrgan">4 Innereien</button>
+      <button id="mOrgan">3 Innereien</button>
+      <button id="mAlign">4 Bild/Haut</button>
     </div>
     <div id="alignRows">
       <div class="row">
@@ -94,8 +94,9 @@
         <span id="kScale" style="display:none"><label><input id="kLen" type="checkbox" checked> Länge</label> <label><input id="kWid" type="checkbox" checked> Breite</label></span>
       </div>
       <div class="row">
-        <label><input id="allowBones" type="checkbox"> Knochen verschiebbar</label>
+        <label><input id="allowBones" type="checkbox" checked> Knochen verschiebbar</label>
         <label><input id="withKids" type="checkbox"> mit Anhang</label>
+        <label title="Der Umriss des Körperteils folgt den Knochen, sobald du einen Knochen loslässt"><input id="autoFit" type="checkbox" checked> Umriss folgt Knochen</label>
         <button id="bPivot">Drehpunkt: Gelenk</button>
         <button id="bFree">Knochen zurück</button>
       </div>
@@ -139,7 +140,7 @@ for (const [id, l] of PARTS) $('part').add(new Option(l, id));
 const S0 = 8, MARGIN = 1.3, TOL = 0.9, CMPX = 2.4;
 const cv = $('cv'), c = cv.getContext('2d');
 let info = null, saved = {}, work = {}, T = {}, links = {}, O = {}, selOrg = null, orgAct = 'move';   // T: Knochen -> [dx, dy, Grad, Maßstab] (absolut), links: Knochen -> {off:Set, on:Set}
-let mode = 'align', boneAct = 'move', pivotMode = 'joint', ref = null, fineMode = true;
+let mode = 'bone', boneAct = 'move', pivotMode = 'joint', ref = null, fineMode = true;
 let view = { z: 1, px: 0, py: 0 }, fitZ = 1;
 let align = { s: 1, s0: 1, tx: 0, ty: 0, r: 0 };
 const aligns = {}, touched = {};
@@ -228,10 +229,11 @@ async function setInfo(msg) {
   if (msg.native) $('rotLbl').style.display = 'none';
   info = msg.info; saved = msg.saved || {}; BN = {}; NAMES = info.bones.map((b) => b.name); for (const b of info.bones) BN[b.name] = b;
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
-  T = {}; const cust = msg.custom;
+  T = {}; Tfit = {}; const cust = msg.custom;
   if (cust) for (const k in cust.bones || {}) T[k] = tFrom(cust.bones[k]);
   O = {}; if (cust) for (const k in cust.organs || {}) O[k] = cust.organs[k].slice();
   links = linksFrom(cust && cust.links);
+  Tfit = cloneT();
   let note = '';
   if (!msg.fresh) { const d = loadDraft(info.kind); if (d) { applyDraft(d); note = 'Entwurf geladen. '; } }
   // Bone-Auswahl
@@ -281,13 +283,48 @@ function applyDraft(d) {
   T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = tFrom(d.bones[k]);
   for (const k in d.fingers || {}) if (BN[k]) T[k] = tFrom(d.fingers[k]);
   O = {}; for (const k in d.organs || {}) O[k] = d.organs[k].slice();
-  links = linksFrom(d.links);
+  links = linksFrom(d.links); Tfit = cloneT();
 }
 
 // ---------- Rückgängig / Wiederholen ----------
 let undoStack = [], redoStack = [];
-const snap = () => JSON.stringify({ w: work, t: T, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
-function restore(s) { const o = JSON.parse(s); work = o.w; T = o.t; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
+// ---------- Umriss folgt den Knochen: Tfit = Knochen-Lage, zu der die Umrisse gerade passen ----------
+let Tfit = {};
+const cloneT = () => JSON.parse(JSON.stringify(T));
+function bpT(b, t, x, y) {
+  if (!t) return [x, y];
+  const kl = t[3] || 1, kw = t.length >= 5 ? (t[4] || 1) : kl, g = b.ang || 0, cg = Math.cos(g), sg = Math.sin(g), a = (t[2] * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a);
+  const dx = x - b.cx, dy = y - b.cy, lx = (cg * dx + sg * dy) * kl, ly = (-sg * dx + cg * dy) * kw, wx = cg * lx - sg * ly, wy = sg * lx + cg * ly;
+  return [b.cx + wx * co - wy * si + t[0], b.cy + wx * si + wy * co + t[1]];
+}
+function bpInv(b, t, X, Y) {
+  if (!t) return [X, Y];
+  const kl = t[3] || 1, kw = t.length >= 5 ? (t[4] || 1) : kl, g = b.ang || 0, cg = Math.cos(g), sg = Math.sin(g), a = (t[2] * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a);
+  const ux = X - b.cx - t[0], uy = Y - b.cy - t[1], wx = ux * co + uy * si, wy = -ux * si + uy * co;
+  const lx = (cg * wx + sg * wy) / kl, ly = (-sg * wx + cg * wy) / kw;
+  return [b.cx + cg * lx - sg * ly, b.cy + sg * lx + cg * ly];
+}
+function fitOutlines() {
+  if (!info) return;
+  for (const [part] of PARTS) {
+    const bs = info.bones.filter((b) => b.group === part && b.core && b.core.length >= 2); if (!bs.length) continue;
+    const segs = bs.map((b) => [b, bpT(b, Tfit[b.name], b.core[0][0], b.core[0][1]), bpT(b, Tfit[b.name], b.core[1][0], b.core[1][1])]);
+    let any = false; for (const b of bs) { const a = Tfit[b.name] || [0, 0, 0, 1, 1], c2 = T[b.name] || [0, 0, 0, 1, 1]; if (JSON.stringify(a) !== JSON.stringify(c2)) { any = true; break; } }
+    if (!any) continue;
+    work[part] = work[part].map(([x, y]) => {
+      let sw = 0, sx = 0, sy = 0;
+      for (const [b, e0, e1] of segs) {
+        const vx = e1[0] - e0[0], vy = e1[1] - e0[1], l2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((x - e0[0]) * vx + (y - e0[1]) * vy) / l2)), d = Math.hypot(e0[0] + vx * t - x, e0[1] + vy * t - y), w = 1 / Math.pow(d + 0.6, 3);
+        const q = bpT(b, T[b.name], ...bpInv(b, Tfit[b.name], x, y)); sw += w; sx += w * q[0]; sy += w * q[1];
+      }
+      return [sx / sw, sy / sw];
+    });
+  }
+  Tfit = cloneT(); dirty = true; skinCache = null;
+}
+const autoFitNow = () => { if ($('autoFit').checked) { fitOutlines(); } else Tfit = cloneT(); };
+const snap = () => JSON.stringify({ w: work, t: T, f: Tfit, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
+function restore(s) { const o = JSON.parse(s); work = o.w; T = o.t; Tfit = o.f || {}; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
 function pushUndo() { const s = snap(); if (undoStack[undoStack.length - 1] !== s) { undoStack.push(s); if (undoStack.length > 60) undoStack.shift(); } redoStack = []; }
 function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); }
 function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); }
@@ -520,7 +557,7 @@ function paint() {
   const nl = sel ? effLinks(sel).size : 0, kids = $('withKids').checked ? ' (mit Anhang)' : ' (nur dieser Knochen)';
   const hintOrg = !selOrg ? 'Innerei antippen oder oben wählen. ' : orgAct === 'move' ? `${selOrg}: ziehen = verschieben. ` : orgAct === 'rot' ? `${selOrg}: ziehen = um die Mitte drehen. ` : `${selOrg}: ziehen = größer/kleiner (${$('oLen').checked && $('oWid').checked ? 'gleichmäßig' : $('oLen').checked ? 'nur Länge' : $('oWid').checked ? 'nur Breite' : 'nichts gewählt'}). `;
   const lw = $('kLen').checked && $('kWid').checked ? '' : $('kLen').checked ? ' (nur Länge)' : $('kWid').checked ? ' (nur Breite)' : ' (nichts gewählt)';
-  const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen oder oben wählen. ' : boneAct === 'span' ? `${sel}: auf der Textur Startpunkt antippen und zum Endpunkt ziehen – nur dieser Knochen wird gelegt, Breite danach mit Skalieren. ` : boneAct === 'move' ? `${sel}: ziehen = verschieben${kids}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Ring drehen${kids}. ` : boneAct === 'scale' ? `${sel}: ziehen = größer/kleiner (vom Ring aus)${lw}${kids}. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
+  const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen oder oben wählen. ' : boneAct === 'span' ? `${sel}: Startpunkt antippen, zum Endpunkt ziehen (nur dieser Knochen). Anderen Knochen wählen: Strg/Umschalt+Klick oder kurz mit zwei Fingern tippen. ` : boneAct === 'move' ? `${sel}: ziehen = verschieben${kids}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Ring drehen${kids}. ` : boneAct === 'scale' ? `${sel}: ziehen = größer/kleiner (vom Ring aus)${lw}${kids}. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
   $('status').textContent = draftNote + (mode === 'align' ? 'Ausrichten: ziehen = Ebene schieben; Pfeile fein. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : mode === 'organ' ? hintOrg : hintBone) + (out.length ? `Rot: ${out.length} Knochen-/Organpunkte ragen aus der Haut.` : '');
   $('alignInfo').textContent = `Maßstab ${(align.s / align.s0 * 100).toFixed(1)}% · Drehung ${align.r.toFixed(2)}°${align.mx ? ' · Figur gespiegelt (Daumen)' : ''}${align.my ? ' · Figur umgedreht' : ''}`;
   $('arot').value = Math.max(-180, Math.min(180, align.r)); $('mAx').classList.toggle('sel', !!align.mx); $('mLn').classList.toggle('sel', !!align.my);
@@ -546,7 +583,7 @@ function pickBone(x, y) {
 }
 cv.addEventListener('pointerdown', (e) => {
   if (!info) return; const p = pos(e); ptrs.set(e.pointerId, p); cv.setPointerCapture(e.pointerId); e.preventDefault();
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, ang: Math.atan2(b[1] - a[1], b[0] - a[0]) }; drag = null; return; }
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, ang: Math.atan2(b[1] - a[1], b[0] - a[0]), t0: Date.now(), d0: Math.hypot(a[0] - b[0], a[1] - b[1]), x0: (a[0] + b[0]) / 2, y0: (a[1] + b[1]) / 2, moved: false }; drag = null; return; }
   const part = $('part').value;
   if (mode === 'form') {
     pushUndo();
@@ -566,6 +603,7 @@ cv.addEventListener('pointerdown', (e) => {
       if (bi >= 0) { pushUndo(); const l = links[sel] || (links[sel] = { off: new Set(), on: new Set() }); const idx = NAMES.indexOf(sel); const was = info.attach.some(([vi, b2]) => vi === bi && b2 === idx); if (l.off.has(bi)) l.off.delete(bi); else if (l.on.has(bi)) l.on.delete(bi); else if (was) l.off.add(bi); else l.on.add(bi); changed(); return; }
     }
     if (boneAct === 'span') {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) { const h3 = pickBone(x, y); if (h3) { sel = h3; $('boneSel').value = h3; } draw(); return; }
       if (!sel) { const h2 = pickBone(x, y); if (h2) { sel = h2; $('boneSel').value = h2; } draw(); return; }
       const b = BN[sel], ends = b.core.map(([cx2, cy2]) => bp(b, cx2, cy2)), d0 = Math.hypot(ends[0][0] - x, ends[0][1] - y), d1 = Math.hypot(ends[1][0] - x, ends[1][1] - y);
       pushUndo(); drag = { kind: 'span', p1: [x, y], p2: [x, y], snap: T[sel] ? T[sel].slice() : null, flip: d1 < d0 }; draw(); return;
@@ -582,7 +620,7 @@ cv.addEventListener('pointerdown', (e) => {
 });
 cv.addEventListener('pointermove', (e) => {
   if (!ptrs.has(e.pointerId)) return; const p = pos(e); ptrs.set(e.pointerId, p);
-  if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; const f = d / (pinch.d || 1), ang = Math.atan2(b[1] - a[1], b[0] - a[0]); if (mode === 'align') { zoomAlign(f, mx, my); let dang = ang - pinch.ang; if (dang > Math.PI) dang -= 2 * Math.PI; if (dang < -Math.PI) dang += 2 * Math.PI; rotAlign((dang * 180) / Math.PI, mx, my); align.tx += (mx - pinch.mx) / view.z; align.ty += (my - pinch.my) / view.z; } else { zoomView(f, mx, my); view.px += mx - pinch.mx; view.py += my - pinch.my; } pinch = { d, mx, my, ang }; draw(); return; }
+  if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; const f = d / (pinch.d || 1), ang = Math.atan2(b[1] - a[1], b[0] - a[0]); if (mode === 'align') { zoomAlign(f, mx, my); let dang = ang - pinch.ang; if (dang > Math.PI) dang -= 2 * Math.PI; if (dang < -Math.PI) dang += 2 * Math.PI; rotAlign((dang * 180) / Math.PI, mx, my); align.tx += (mx - pinch.mx) / view.z; align.ty += (my - pinch.my) / view.z; } else { zoomView(f, mx, my); view.px += mx - pinch.mx; view.py += my - pinch.my; } pinch = { ...pinch, d, mx, my, ang, moved: pinch.moved || Math.abs(d - pinch.d0) > 10 || Math.hypot(mx - pinch.x0, my - pinch.y0) > 10 }; draw(); return; }
   if (!drag) return;
   const part = $('part').value;
   const group = () => ($('withKids').checked ? subtree(sel) : [sel]);
@@ -613,7 +651,9 @@ cv.addEventListener('pointermove', (e) => {
     drag.last = p; dirty = true; saveDraft(); }
   draw();
 });
-const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
+const up = (e) => { if (drag && ['bone', 'rot', 'scale', 'span'].includes(drag.kind) && ptrs.size <= 1) autoFitNow();
+  if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && e.type === 'pointerup' && mode === 'bone' && boneAct === 'span' && $('allowBones').checked) { const [x, y] = scrToCm(pinch.x0, pinch.y0), h4 = pickBone(x, y); if (h4) { sel = h4; $('boneSel').value = h4; } pinch.moved = true; }
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('dblclick', (e) => {
   if (mode !== 'form' || !info) return; const p = pos(e), pts = work[$('part').value]; if (pts.length <= 6) return;
@@ -636,7 +676,7 @@ $('orgSel').onchange = () => { selOrg = $('orgSel').value || null; draw(); };
 $('resetOrgans').onclick = () => { pushUndo(); O = {}; selOrg = null; changed(); };
 $('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link'); $('bSpan').onclick = () => setAct('span');
 $('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
-$('bFree').onclick = () => { if (!sel) return; pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
+$('bFree').onclick = () => { if (!sel) return; pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; autoFitNow(); changed(); };
 $('boneSel').onchange = () => { sel = $('boneSel').value || null; draw(); };
 // Feinjustierung der Figur-Ebene
 const nudge = (dx, dy) => { const st = (fineMode ? 0.5 : 4) / view.z; align.tx += dx * st; align.ty += dy * st; alignTouch(); draw(); };
@@ -671,8 +711,8 @@ $('undo').onclick = undo; $('redo').onclick = redo;
 window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); } });
 $('check').onclick = () => { if (info) showCheck(); };
 $('resetPart').onclick = () => { pushUndo(); const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
-$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
-$('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; changed(); };
+$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; Tfit = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
+$('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; autoFitNow(); changed(); };
 $('resetLinks').onclick = () => { pushUndo(); if (sel) delete links[sel]; else links = {}; changed(); };
 let resetSkins = false;
 $('apply').onclick = async () => {
@@ -719,7 +759,7 @@ $('pv').addEventListener('pointerdown', (e) => { if (e.target.closest('#pvbar'))
 $('pv').addEventListener('pointermove', (e) => { if (!pvDrag) return; const d = window.devicePixelRatio || 1, f = rot === 0 ? 1 : 1; let dx = e.clientX - pvDrag.x, dy = e.clientY - pvDrag.y; if (rot === 90) [dx, dy] = [dy, -dx]; else if (rot === -90) [dx, dy] = [-dy, dx]; pvView.x += dx * d * f; pvView.y += dy * d * f; pvDrag = { x: e.clientX, y: e.clientY }; pvPaint(); });
 $('pv').addEventListener('pointerup', () => { pvDrag = null; }); $('pv').addEventListener('pointercancel', () => { pvDrag = null; });
 $('pv').addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation(); pvView.z = Math.max(0.4, Math.min(40, pvView.z * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); pvPaint(); }, { passive: false });
-resize(); pvResize(); fitView();
+setMode('bone'); resize(); pvResize(); fitView();
 post({ zdForm: 'ready' });
 </script>
 </body>
