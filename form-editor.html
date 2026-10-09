@@ -37,7 +37,7 @@
   </header>
   <div id="drawer">
     <div class="row"><label>Figur <select id="kind"></select></label>
-      <label>Ansicht <select id="rot" title="Ansicht drehen"><option value="0">Querformat</option><option value="90">Hochformat (Handy nach links gekippt)</option><option value="-90">Hochformat (Handy nach rechts gekippt)</option></select></label></div>
+      <label id="rotLbl">Ansicht <select id="rot" title="Ansicht drehen"><option value="0">Querformat</option><option value="90">Hochformat (Handy nach links gekippt)</option><option value="-90">Hochformat (Handy nach rechts gekippt)</option></select></label></div>
     <div class="row"><label class="btn">Referenzbild laden<input id="file" type="file" accept="image/*" style="display:none"></label>
       <button id="xfer">Export / Import</button></div>
     <div class="row"><button id="resetPart">Teil zurücksetzen</button><button id="resetAll">Figur zurücksetzen</button><button id="resetBones">Knochen zurücksetzen</button></div>
@@ -114,6 +114,8 @@ function cumOff(name, memo) {
 const subtree = (name) => { const s = new Set([name]); let ch2 = true; while (ch2) { ch2 = false; for (const b of info.bones) if (b.parent && s.has(b.parent) && !s.has(b.name)) { s.add(b.name); ch2 = true; } } return s; };
 
 function setInfo(msg) {
+  if (msg.native && rot !== 0) { rot = 0; $('rot').value = '0'; resize(); }
+  if (msg.native) $('rotLbl').style.display = 'none';
   info = msg.info; allText = msg.allText || ''; BN = bonesByName();
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
   boneOff = {}; const cb = (msg.custom && msg.custom.bones) || {}; for (const k in cb) boneOff[k] = cb[k].slice();
