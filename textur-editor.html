@@ -38,6 +38,10 @@
       <div class="row" id="fitRow" style="display:none">
         <button id="fitAuto">Automatisch: Körperteil antippen</button>
         <button id="fitReset">Form zurücksetzen</button>
+        <button id="fitMx" title="Bild an der Längsachse des Körperteils spiegeln (Daumen-Seite)">⇋ Daumen-Seite</button>
+        <button id="fitMy" title="Bild entlang der Querachse spiegeln (umdrehen)">⇅ Umdrehen</button>
+        <button id="outMx">Ergebnis ⇋ spiegeln &amp; anwenden</button>
+        <button id="outMy">Ergebnis ⇅ spiegeln &amp; anwenden</button>
         <label>Größe <input id="fitScale" type="range" min="0.3" max="2.2" step="0.01" value="1"></label>
         <span class="hint">Weiße Punkte ziehen. Auf die Linie tippen = Punkt hinzufügen, Doppeltipp auf Punkt = löschen. Innen ziehen = ganze Form verschieben.</span>
       </div>
@@ -366,6 +370,25 @@ sel.addEventListener('change', () => { refreshMode(); build(); });
 $('fitOn').addEventListener('change', () => { refreshMode(); build(); });
 $('fitAuto').onclick = () => { autoMode = !autoMode; $('fitAuto').classList.toggle('sel', autoMode); $('info').textContent = autoMode ? 'Tippe jetzt im Bild auf das passende Körperteil.' : ''; };
 $('fitReset').onclick = () => { delete fitStates[sel.value]; refreshMode(); build(); };
+function fitReflect(along) {
+  const st = fitState(), c = centroid(st.pts); let sxx = 0, syy = 0, sxy = 0;
+  for (const q of st.pts) { const x = q[0] - c[0], y = q[1] - c[1]; sxx += x * x; syy += y * y; sxy += x * y; }
+  const th = 0.5 * Math.atan2(2 * sxy, sxx - syy); let ux = Math.cos(th), uy = Math.sin(th);
+  if (!along) { const t = ux; ux = -uy; uy = t; }
+  for (const q of st.pts) { const x = q[0] - c[0], y = q[1] - c[1], d = x * ux + y * uy; q[0] = c[0] + 2 * d * ux - x; q[1] = c[1] + 2 * d * uy - y; }
+  build();
+}
+$('fitMx').onclick = () => { if (img && isFit()) fitReflect(true); else $('info').textContent = 'Erst „Form anpassen“ einschalten.'; };
+$('fitMy').onclick = () => { if (img && isFit()) fitReflect(false); else $('info').textContent = 'Erst „Form anpassen“ einschalten.'; };
+function flipOut(h) {
+  const src = isFit() && fitCv ? fitCv : tile; if (!img || !src) return;
+  const c = document.createElement('canvas'); c.width = src.width; c.height = src.height; const x = c.getContext('2d');
+  x.translate(h ? c.width : 0, h ? 0 : c.height); x.scale(h ? -1 : 1, h ? 1 : -1); x.drawImage(src, 0, 0);
+  const msg = { zdTex: true, name: sel.value, dataUrl: c.toDataURL('image/png') }; if (isFit()) msg.fit = fitBox;
+  if (EMB) window.parent.postMessage(msg, '*'); else { try { localStorage.setItem('zd_tex_' + sel.value, msg.dataUrl); if (msg.fit) localStorage.setItem('zd_texfit_' + sel.value, JSON.stringify(msg.fit)); } catch (e) {} }
+  $('info').textContent = 'Gespiegelt und übernommen.';
+}
+$('outMx').onclick = () => flipOut(true); $('outMy').onclick = () => flipOut(false);
 $('fitScale').addEventListener('input', () => { const st = fitState(), k = +$('fitScale').value / st.scale, c = centroid(st.pts); st.pts.forEach((q) => { q[0] = c[0] + (q[0] - c[0]) * k; q[1] = c[1] + (q[1] - c[1]) * k; }); st.scale = +$('fitScale').value; build(); });
 
 function drawPrev() {

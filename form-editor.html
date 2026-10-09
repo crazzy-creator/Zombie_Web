@@ -26,6 +26,10 @@
   #chk.open{display:block}
   #chk li{margin:3px 0}
   #chk .bad{color:#ff8a8a}#chk .ok{color:#8aff9a}#chk .warn{color:#ffd37a}
+  #pv{position:absolute;top:6px;right:6px;width:150px;height:262px;background:#171212;border:1px solid #5a4646;border-radius:8px;z-index:4;overflow:hidden;touch-action:none}
+  #pv canvas{width:100%;height:100%}
+  #pvbar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:3px;padding:3px;background:rgba(10,8,8,.7);font-size:11px;align-items:center}
+  #pvbar button{padding:2px 6px;font-size:11px}
   #ovl{position:absolute;inset:0;background:rgba(10,8,8,.95);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
   #ovl.open{display:flex}
   #ovl textarea{flex:1;background:#0c0909;color:#ddd;border:1px solid #4a4040;border-radius:8px;font-size:12px;padding:8px}
@@ -117,7 +121,7 @@
       <span id="alignSliders"><label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
       <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label></span>
     </div>
-    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
+    <div class="box"><canvas id="cv"></canvas><div id="pv"><canvas id="pvc"></canvas><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label></div></div><div id="chk"></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
     <div class="hint" id="status"></div>
   </main>
 </div>
@@ -156,7 +160,7 @@ function applyRot() {
   else if (rot === 90) { app.style.width = H + 'px'; app.style.height = W + 'px'; app.style.transform = `translateX(${W}px) rotate(90deg)`; }
   else { app.style.width = H + 'px'; app.style.height = W + 'px'; app.style.transform = `translateY(${H}px) rotate(-90deg)`; }
 }
-function resize() { const atFit = ref && Math.abs(view.z - fitZ) < 1e-6; applyRot(); dpr = window.devicePixelRatio || 1; cw = cv.clientWidth; ch = cv.clientHeight; if (atFit) fitView(); cv.width = Math.max(10, Math.round(cw * dpr)); cv.height = Math.max(10, Math.round(ch * dpr)); draw(); }
+function resize() { if (typeof pvResize === 'function') setTimeout(pvResize, 0); const atFit = ref && Math.abs(view.z - fitZ) < 1e-6; applyRot(); dpr = window.devicePixelRatio || 1; cw = cv.clientWidth; ch = cv.clientHeight; if (atFit) fitView(); cv.width = Math.max(10, Math.round(cw * dpr)); cv.height = Math.max(10, Math.round(ch * dpr)); draw(); }
 window.addEventListener('resize', resize);
 
 // ---------- Koordinaten: cm -(Figur-Ebene: Maßstab, Drehung, Verschiebung)-> Bild -(Ansicht)-> Schirm ----------
@@ -226,13 +230,13 @@ async function setInfo(msg) {
   let note = '';
   if (!msg.fresh) { const d = loadDraft(info.kind); if (d) { applyDraft(d); note = 'Entwurf geladen. '; } }
   // Bone-Auswahl
-  const bs = $('boneSel'); bs.innerHTML = ''; bs.add(new Option('Knochen wählen …', '')); for (const n of NAMES) bs.add(new Option(n, n));
+  const bs = $('boneSel'); bs.innerHTML = ''; bs.add(new Option('Knochen wählen …', '')); for (const b of info.bones) bs.add(new Option(b.label || b.name, b.name));
   const os = $('orgSel'); os.innerHTML = ''; os.add(new Option('Innerei wählen …', '')); for (const d of info.organDefs || []) os.add(new Option(d.name, d.name));
   selOrg = null;
   $('kind').value = info.kind; sel = null; dirty = true; draftNote = note; undoStack = []; redoStack = [];
   for (const k in aligns) delete aligns[k]; for (const k in touched) delete touched[k];
   ref = null; await loadRef(info.kind);
-  fitView(); fitAlign(); draw();
+  fitView(); fitAlign(); draw(); pvBitmap = null; for (const k in pvKeys) delete pvKeys[k]; schedulePreview();
 }
 let draftNote = '';
 
@@ -256,19 +260,21 @@ function saveRef() {
 function currentData() {
   const data = { outlines: {}, bones: {}, boneV: 2, links: {}, organs: {} };
   for (const [p] of PARTS) if (JSON.stringify(work[p].map((q) => q.map((v) => Math.round(v * 100) / 100))) !== JSON.stringify(info.base[p])) data.outlines[p] = work[p].map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]);
-  for (const k in T) if (hasT(T[k])) { const t = T[k], kl = t[3] || 1, kw = t.length >= 5 ? (t[4] || 1) : kl, o = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10]; if (Math.abs(kl - 1) > 0.002 || Math.abs(kw - 1) > 0.002) o.push(Math.round(kl * 1000) / 1000, Math.round(kw * 1000) / 1000); data.bones[k] = o; }
+  for (const k in T) if (hasT(T[k]) && BN[k] && !BN[k].editorOnly) { const t = T[k], kl = t[3] || 1, kw = t.length >= 5 ? (t[4] || 1) : kl, o = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10]; if (Math.abs(kl - 1) > 0.002 || Math.abs(kw - 1) > 0.002) o.push(Math.round(kl * 1000) / 1000, Math.round(kw * 1000) / 1000); data.bones[k] = o; }
   for (const k in O) { const t = O[k]; if (Math.abs(t[0]) > 0.005 || Math.abs(t[1]) > 0.005 || Math.abs(t[2]) > 0.05 || Math.abs(t[3] - 1) > 0.002 || Math.abs(t[4] - 1) > 0.002) data.organs[k] = [Math.round(t[0] * 100) / 100, Math.round(t[1] * 100) / 100, Math.round(t[2] * 10) / 10, Math.round(t[3] * 1000) / 1000, Math.round(t[4] * 1000) / 1000]; }
   for (const k in links) { const l = links[k]; if (!l.off.size && !l.on.size) continue; data.links[k] = { off: [...l.off].map((i) => [info.verts[i].x, info.verts[i].y]), on: [...l.on].map((i) => [info.verts[i].x, info.verts[i].y]) }; }
   return data;
 }
 function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length; }
 let draftTimer = 0;
-function saveDraft() { if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
+function fingerData() { const o = {}; for (const k in T) if (BN[k] && BN[k].editorOnly && hasT(T[k])) o[k] = T[k].map((v) => Math.round(v * 1000) / 1000); return o; }
+function saveDraft() { schedulePreview(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fingers = fingerData(); if (isEmpty(d) && !Object.keys(d.fingers).length) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
 function loadDraft(kind) { try { return (JSON.parse(localStorage.getItem(DRAFT) || '{}')[kind] || {}).data || null; } catch (e) { return null; } }
 function clearDraft(kind) { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); delete all[kind]; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }
 function applyDraft(d) {
   for (const p in d.outlines || {}) if (work[p]) work[p] = d.outlines[p].map((q) => q.slice());
   T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = tFrom(d.bones[k]);
+  for (const k in d.fingers || {}) if (BN[k]) T[k] = tFrom(d.fingers[k]);
   O = {}; for (const k in d.organs || {}) O[k] = d.organs[k].slice();
   links = linksFrom(d.links);
 }
@@ -299,7 +305,7 @@ function fitView() {
   else { fitZ = 1; view = { z: 1, px: 0, py: 0 }; }
   $('zoom').value = 1;
 }
-function alignTouch() { touched[alignKey()] = true; saveRef(); }
+function alignTouch() { touched[alignKey()] = true; saveRef(); schedulePreview(); }
 
 // ---------- Schutzpunkte ----------
 const visBone = (b, part) => (b.group === part || (part === 'torso' && b.group === 'torso')) ;
@@ -459,7 +465,7 @@ function paint() {
     if (!skinCache || skinCache.key !== key) skinCache = { key, r: skinCanvas(part, align) };
     const r = skinCache.r, k = kap() * view.z, an = rr(), co = Math.cos(an), si = Math.sin(an);
     c.save(); path(work[part]); c.clip(); c.setTransform(dpr * k * co, dpr * k * si, -dpr * k * si, dpr * k * co, dpr * (align.tx * view.z + view.px), dpr * (align.ty * view.z + view.py));
-    c.drawImage(r.cvs, r.ox, r.oy, r.bw, r.bh); c.restore();
+    c.globalAlpha = 1; c.drawImage(r.cvs, r.ox, r.oy, r.bw, r.bh); c.restore();
   }
   const subs = sel ? ($('withKids').checked ? subtree(sel) : new Set([sel])) : null;
   if ($('showBones').checked || mode === 'bone') {
@@ -489,7 +495,7 @@ function paint() {
       else { c.fillStyle = was ? '#ff5050' : 'rgba(255,255,255,.35)'; c.fillRect(p[0] - 2, p[1] - 2, 4, 4); if (was) { c.strokeStyle = '#ff5050'; c.beginPath(); c.moveTo(p[0] - 4, p[1] - 4); c.lineTo(p[0] + 4, p[1] + 4); c.moveTo(p[0] + 4, p[1] - 4); c.lineTo(p[0] - 4, p[1] + 4); c.stroke(); } }
     });
   }
-  if ($('showOrgans').checked && (info.organDefs || []).length) {
+  if ($('showOrgans').checked && (info.organDefs || []).length && (part === 'torso' || mode === 'organ')) {
     for (const d of info.organDefs) {
       const poly = orgPoly(d), hl = d.name === selOrg; path(poly);
       c.fillStyle = hl ? 'rgba(255,170,110,.55)' : 'rgba(255,130,150,' + (mode === 'organ' ? '.4' : '.18') + ')'; c.fill(); c.strokeStyle = hl ? '#ffd84a' : 'rgba(255,170,190,.8)'; c.lineWidth = hl ? 2.5 : 1; c.stroke();
@@ -594,7 +600,8 @@ cv.addEventListener('dblclick', (e) => {
 cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); (mode === 'align' ? zoomAlign : zoomView)(e.deltaY < 0 ? 1.1 : 1 / 1.1, p[0], p[1]); draw(); }, { passive: false });
 
 function setMode(m) {
-  mode = m; for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone'], ['mOrgan', 'organ']]) $(id).classList.toggle('sel', m === mm);
+  mode = m; if (m === 'organ' && $('part').value !== 'torso') { $('part').value = 'torso'; dirty = true; fitAlign(); }
+  for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone'], ['mOrgan', 'organ']]) $(id).classList.toggle('sel', m === mm);
   $('alignRows').style.display = m === 'align' ? '' : 'none'; $('formRows').style.display = m === 'form' ? '' : 'none'; $('boneRows').style.display = m === 'bone' ? '' : 'none'; $('organRows').style.display = m === 'organ' ? '' : 'none';
   $('alignSliders').style.display = m === 'align' ? '' : 'none'; resize();
 }
@@ -619,8 +626,8 @@ $('zoom').addEventListener('input', () => { const nz = fitZ * +$('zoom').value, 
 $('asc').addEventListener('input', () => { const ns = align.s0 * +$('asc').value; zoomAlign(ns / align.s, cw / 2, ch / 2); draw(); });
 $('alpha').addEventListener('input', draw);
 $('arot').addEventListener('input', () => { rotAlign(+$('arot').value - align.r, cw / 2, ch / 2); draw(); });
-$('mAx').onclick = () => { align.mx = !align.mx; skinCache = null; alignTouch(); draw(); };
-$('mLn').onclick = () => { align.my = !align.my; skinCache = null; alignTouch(); draw(); };
+$('mAx').onclick = () => { align.mx = !align.mx; skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
+$('mLn').onclick = () => { align.my = !align.my; skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
 for (const id of ['showBones', 'showAll', 'protect', 'showThreads', 'withKids', 'showSkin', 'showOrgans', 'kLen', 'kWid', 'oLen', 'oWid']) $(id).addEventListener('change', draw);
 $('solo').addEventListener('change', () => { fitAlign(); draw(); });
 $('keepRef').addEventListener('change', () => { if ($('keepRef').checked) saveRef(); else if (info) kvDel('ref/' + info.kind); });
@@ -661,7 +668,35 @@ $('taCopy').onclick = () => { $('ta').select(); try { navigator.clipboard.writeT
 $('taLoad').onclick = () => post({ zdForm: 'import', text: $('ta').value, kind: info ? info.kind : 'zombie' });
 function post(m) { if (EMB) window.parent.postMessage(m, '*'); }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormInfo) return; if (d.error) { $('taInfo').textContent = d.error; return; } setInfo(d).then(() => $('ovl').classList.remove('open')); });
-resize(); fitView();
+// ---------- Vorschau-Fenster (Echtzeit-Ergebnis aus dem Spiel) ----------
+let pvBitmap = null, pvBusy = false, pvTimer = 0, pvDirty = false, pvView = { z: 1, x: 0, y: 0 }, pvBig = false;
+const pvc = $('pvc'), pvx = pvc.getContext('2d'), pvSkins = {}, pvKeys = {};
+function pvResize() { const r = $('pv').getBoundingClientRect(), d = window.devicePixelRatio || 1; const w = $('pv').clientWidth, h = $('pv').clientHeight; pvc.width = Math.max(10, Math.round(w * d)); pvc.height = Math.max(10, Math.round(h * d)); pvPaint(); void r; }
+function pvPaint() {
+  const w = pvc.width, h = pvc.height; pvx.setTransform(1, 0, 0, 1, 0, 0); pvx.fillStyle = '#1b1515'; pvx.fillRect(0, 0, w, h);
+  if (!pvBitmap) { pvx.fillStyle = '#6a5a5a'; pvx.font = `${12 * (window.devicePixelRatio || 1)}px system-ui`; pvx.textAlign = 'center'; pvx.fillText($('pvLive').checked ? 'Vorschau lädt …' : 'Vorschau aus', w / 2, h / 2); return; }
+  const fit = Math.min(w / pvBitmap.width, h / pvBitmap.height), k = fit * pvView.z;
+  pvx.imageSmoothingQuality = 'high'; pvx.drawImage(pvBitmap, w / 2 - (pvBitmap.width * k) / 2 + pvView.x, h / 2 - (pvBitmap.height * k) / 2 + pvView.y, pvBitmap.width * k, pvBitmap.height * k);
+}
+function schedulePreview() { if (!info || !EMB || !$('pvLive').checked) return; pvDirty = true; if (pvTimer || pvBusy) return; pvTimer = setTimeout(sendPreview, 280); }
+function sendPreview() {
+  pvTimer = 0; if (!pvDirty || pvBusy || !info) return; pvDirty = false; pvBusy = true;
+  const skins = {};
+  if ($('useRef').checked && ref) for (const [p] of PARTS) { const key = info.kind + '/' + ($('solo').checked ? p : 'all'); if (!touched[key] || !aligns[key]) continue; const ck = JSON.stringify([aligns[key], work[p]]); if (pvKeys[p] !== ck) { const r = skinCanvas(p, aligns[key]), sc = Math.min(1, 512 / Math.max(r.cvs.width, r.cvs.height)), t = document.createElement('canvas'); t.width = Math.round(r.cvs.width * sc); t.height = Math.round(r.cvs.height * sc); t.getContext('2d').drawImage(r.cvs, 0, 0, t.width, t.height); pvSkins[p] = { dataUrl: t.toDataURL('image/jpeg', 0.85), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] }; pvKeys[p] = ck; } skins[p] = pvSkins[p]; }
+  post({ zdForm: 'preview', kind: info.kind, data: currentData(), skins, w: 480, h: 840 });
+  setTimeout(() => { if (pvBusy) { pvBusy = false; if (pvDirty) schedulePreview(); } }, 6000);
+}
+window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormPreview) return; pvBusy = false; if (d.bitmap) { pvBitmap = d.bitmap; pvPaint(); } if (pvDirty) schedulePreview(); });
+$('pvP').onclick = () => { pvView.z = Math.min(6, pvView.z * 1.3); pvPaint(); }; $('pvM').onclick = () => { pvView.z = Math.max(0.4, pvView.z / 1.3); pvPaint(); };
+$('pvR').onclick = () => { pvView = { z: 1, x: 0, y: 0 }; pvPaint(); };
+$('pvBig').onclick = () => { pvBig = !pvBig; $('pv').style.width = pvBig ? '320px' : '150px'; $('pv').style.height = pvBig ? '560px' : '262px'; pvResize(); };
+$('pvLive').onchange = () => { if ($('pvLive').checked) { pvDirty = true; sendPreview(); } else pvPaint(); };
+let pvDrag = null;
+$('pv').addEventListener('pointerdown', (e) => { if (e.target.closest('#pvbar')) return; pvDrag = { x: e.clientX, y: e.clientY }; $('pv').setPointerCapture(e.pointerId); e.stopPropagation(); });
+$('pv').addEventListener('pointermove', (e) => { if (!pvDrag) return; const d = window.devicePixelRatio || 1, f = rot === 0 ? 1 : 1; let dx = e.clientX - pvDrag.x, dy = e.clientY - pvDrag.y; if (rot === 90) [dx, dy] = [dy, -dx]; else if (rot === -90) [dx, dy] = [-dy, dx]; pvView.x += dx * d * f; pvView.y += dy * d * f; pvDrag = { x: e.clientX, y: e.clientY }; pvPaint(); });
+$('pv').addEventListener('pointerup', () => { pvDrag = null; }); $('pv').addEventListener('pointercancel', () => { pvDrag = null; });
+$('pv').addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation(); pvView.z = Math.max(0.4, Math.min(6, pvView.z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); pvPaint(); }, { passive: false });
+resize(); pvResize(); fitView();
 post({ zdForm: 'ready' });
 </script>
 </body>
