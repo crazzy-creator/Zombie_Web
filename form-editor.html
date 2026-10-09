@@ -40,8 +40,8 @@
       <label id="rotLbl">Ansicht <select id="rot" title="Ansicht drehen"><option value="0">Querformat</option><option value="90">Hochformat (Handy nach links gekippt)</option><option value="-90">Hochformat (Handy nach rechts gekippt)</option></select></label></div>
     <div class="row"><label class="btn">Referenzbild laden<input id="file" type="file" accept="image/*" style="display:none"></label>
       <button id="xfer">Export / Import</button></div>
-    <div class="row"><button id="resetPart">Teil zurücksetzen</button><button id="resetAll">Figur zurücksetzen</button><button id="resetBones">Knochen zurücksetzen</button></div>
-    <div class="row"><label><input id="showBones" type="checkbox" checked> Knochen zeigen</label><label><input id="showAll" type="checkbox" checked> alle Teile zeigen</label></div>
+    <div class="row"><button id="resetPart">Teil zurücksetzen</button><button id="resetAll">Figur zurücksetzen</button><button id="resetBones">Knochen zurücksetzen</button><button id="resetLinks">Fäden zurücksetzen</button></div>
+    <div class="row"><label><input id="showBones" type="checkbox" checked> Knochen zeigen</label><label><input id="showThreads" type="checkbox" checked> Fäden zeigen</label><label><input id="showAll" type="checkbox" checked> alle Teile zeigen</label></div>
     <div class="row"><label><input id="protect" type="checkbox" checked> Schutzabstand zu Knochen</label><label><input id="allowBones" type="checkbox"> Knochen verschiebbar</label></div>
     <div class="row"><label>Bild-Deckkraft <input id="alpha" type="range" min="0" max="1" step="0.02" value="0.85"></label></div>
     <div class="hint" id="info"></div>
@@ -52,6 +52,14 @@
       <button id="mAlign" class="sel">1 Ausrichten</button>
       <button id="mForm">2 Form</button>
       <button id="mBone">3 Knochen</button>
+    </div>
+    <div class="row" id="boneRow" style="display:none">
+      <button id="bMove" class="sel">Verschieben</button>
+      <button id="bRot">Drehen</button>
+      <button id="bLink">Fäden</button>
+      <label><input id="withKids" type="checkbox" checked> mit Anhang</label>
+      <button id="bPivot">Drehpunkt: Gelenk</button>
+      <button id="bFree">Knochen zurück</button>
     </div>
     <div class="row">
       <label>Zoom <input id="zoom" type="range" min="0.25" max="6" step="0.01" value="1"></label>
@@ -71,21 +79,18 @@ const KINDS = [['zombie', 'Zombie'], ['fat', 'Fetter Zombie'], ['alien', 'Alien'
 const PARTS = [['torso', 'Rumpf + Kopf'], ['armN', 'Arm vorn'], ['armF', 'Arm hinten'], ['beinN', 'Bein vorn'], ['beinF', 'Bein hinten']];
 for (const [id, l] of KINDS) $('kind').add(new Option(l, id));
 for (const [id, l] of PARTS) $('part').add(new Option(l, id));
-const S0 = 8;              // Pixel je cm in Bildkoordinaten bei Figur-Ebene = 1
-const MARGIN = 1.3;        // cm Schutzabstand der Haut zu Knochen/Organen
+const S0 = 8, MARGIN = 1.3, TOL = 0.9;
 const cv = $('cv'), c = cv.getContext('2d');
-let info = null, allText = '', work = {}, boneOff = {};
-let mode = 'align', ref = null;
+let info = null, saved = {}, work = {}, T = {}, links = {};   // T: Knochen -> [dx, dy, Grad] (absolut), links: Knochen -> {off:Set, on:Set} (Hautpunkt-Nummern)
+let mode = 'align', boneAct = 'move', pivotMode = 'joint', ref = null;
 let view = { z: 1, px: 0, py: 0 }, fitZ = 1;
 let align = { s: 1, tx: 0, ty: 0 }, alignS0 = 1;
 const aligns = {};
-let sel = null;            // gewählter Knochen
-let samples = null, grid = null; // Schutzpunkte für das gewählte Teil
-let dirty = true;
-let cw = 800, ch = 500, dpr = 1;
-
-let rot = 0;
+let sel = null, samples = null, grid = null, dirty = true;
+let cw = 800, ch = 500, dpr = 1, rot = 0;
 const app = $('app');
+const DRAFT = 'zd_form_draft_v2';
+
 function applyRot() {
   const W = window.innerWidth, H = window.innerHeight;
   app.classList.toggle('rot', rot !== 0);
@@ -102,26 +107,59 @@ const cmToScr = (x, y) => { const k = K(); return [x * k + align.tx * view.z + v
 const scrToCm = (sx, sy) => { const k = K(); return [(sx - align.tx * view.z - view.px) / k, (sy - align.ty * view.z - view.py) / k]; };
 const scrToImg = (sx, sy) => [(sx - view.px) / view.z, (sy - view.py) / view.z];
 
-// ---------- Daten ----------
-const bonesByName = () => { const m = {}; for (const b of info.bones) m[b.name] = b; return m; };
-let BN = {};
-function cumOff(name, memo) {
-  if (memo[name]) return memo[name];
-  const b = BN[name]; const own = boneOff[name] || [0, 0];
-  const p = b && b.parent ? cumOff(b.parent, memo) : [0, 0];
-  return (memo[name] = [p[0] + own[0], p[1] + own[1]]);
+// ---------- Knochen-Lagen ----------
+let BN = {}, NAMES = [];
+const kids = (n) => info.bones.filter((b) => b.parent === n).map((b) => b.name);
+function subtree(name) { const s = new Set([name]); let again = true; while (again) { again = false; for (const b of info.bones) if (b.parent && s.has(b.parent) && !s.has(b.name)) { s.add(b.name); again = true; } } return s; }
+function bp(b, x, y) { const t = T[b.name]; if (!t) return [x, y]; const a = (t[2] * Math.PI) / 180, co = Math.cos(a), si = Math.sin(a), dx = x - b.cx, dy = y - b.cy; return [b.cx + dx * co - dy * si + t[0], b.cy + dx * si + dy * co + t[1]]; }
+function moveBody(name, phi, q, e) {   // starre Bewegung: Drehung phi (Bogenmaß) um q, dann Verschiebung e
+  const b = BN[name], t = T[name] || (T[name] = [0, 0, 0]);
+  const cc = [b.cx + t[0], b.cy + t[1]], co = Math.cos(phi), si = Math.sin(phi), dx = cc[0] - q[0], dy = cc[1] - q[1];
+  const nc = [q[0] + dx * co - dy * si + e[0], q[1] + dx * si + dy * co + e[1]];
+  t[0] = nc[0] - b.cx; t[1] = nc[1] - b.cy; t[2] += (phi * 180) / Math.PI;
 }
-const subtree = (name) => { const s = new Set([name]); let ch2 = true; while (ch2) { ch2 = false; for (const b of info.bones) if (b.parent && s.has(b.parent) && !s.has(b.name)) { s.add(b.name); ch2 = true; } } return s; };
+function parentJoint(name) { const b = BN[name]; if (!b || !b.parent) return null; return info.joints.find((j) => (j.a === name && j.b === b.parent) || (j.b === name && j.a === b.parent)) || null; }
+function pivotOf(name) { const b = BN[name]; const j = pivotMode === 'joint' ? parentJoint(name) : null; return j ? bp(b, j.x, j.y) : bp(b, b.cx, b.cy); }
+const hasT = (t) => Math.abs(t[0]) > 0.005 || Math.abs(t[1]) > 0.005 || Math.abs(t[2]) > 0.05;
 
+// ---------- Daten laden ----------
+function nearestVert(x, y, g) { let bi = -1, bd = TOL; info.verts.forEach((v, i) => { if (g && v.g !== g) return; const d = Math.hypot(v.x - x, v.y - y); if (d < bd) { bd = d; bi = i; } }); return bi; }
 function setInfo(msg) {
   if (msg.native && rot !== 0) { rot = 0; $('rot').value = '0'; resize(); }
   if (msg.native) $('rotLbl').style.display = 'none';
-  info = msg.info; allText = msg.allText || ''; BN = bonesByName();
+  info = msg.info; saved = msg.saved || {}; BN = {}; NAMES = info.bones.map((b) => b.name); for (const b of info.bones) BN[b.name] = b;
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
-  boneOff = {}; const cb = (msg.custom && msg.custom.bones) || {}; for (const k in cb) boneOff[k] = cb[k].slice();
-  $('kind').value = info.kind; sel = null; dirty = true;
-  fitAlign(); updateInfo(); draw();
+  T = {}; links = {}; const cust = msg.custom;
+  if (cust) {
+    for (const k in cust.bones || {}) T[k] = [cust.bones[k][0] || 0, cust.bones[k][1] || 0, cust.bones[k][2] || 0];
+    for (const k in cust.links || {}) { const l = (links[k] = { off: new Set(), on: new Set() }); for (const [x, y] of cust.links[k].off || []) { const i = nearestVert(x, y); if (i >= 0) l.off.add(i); } for (const [x, y] of cust.links[k].on || []) { const i = nearestVert(x, y); if (i >= 0) l.on.add(i); } }
+  }
+  let note = '';
+  if (!msg.fresh) { const d = loadDraft(info.kind); if (d) { applyDraft(d); note = 'Entwurf geladen. '; } }
+  $('kind').value = info.kind; sel = null; dirty = true; draftNote = note;
+  fitAlign(); draw();
 }
+let draftNote = '';
+
+// ---------- Entwurf (bleibt beim Schließen erhalten) ----------
+function currentData() {
+  const data = { outlines: {}, bones: {}, boneV: 2, links: {} };
+  for (const [p] of PARTS) if (JSON.stringify(work[p].map((q) => q.map((v) => Math.round(v * 100) / 100))) !== JSON.stringify(info.base[p])) data.outlines[p] = work[p].map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]);
+  for (const k in T) if (hasT(T[k])) data.bones[k] = [Math.round(T[k][0] * 100) / 100, Math.round(T[k][1] * 100) / 100, Math.round(T[k][2] * 10) / 10];
+  for (const k in links) { const l = links[k]; if (!l.off.size && !l.on.size) continue; data.links[k] = { off: [...l.off].map((i) => [info.verts[i].x, info.verts[i].y]), on: [...l.on].map((i) => [info.verts[i].x, info.verts[i].y]) }; }
+  return data;
+}
+function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length; }
+let draftTimer = 0;
+function saveDraft() { if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
+function loadDraft(kind) { try { return (JSON.parse(localStorage.getItem(DRAFT) || '{}')[kind] || {}).data || null; } catch (e) { return null; } }
+function clearDraft(kind) { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); delete all[kind]; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }
+function applyDraft(d) {
+  for (const p in d.outlines || {}) if (work[p]) work[p] = d.outlines[p].map((q) => q.slice());
+  T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = d.bones[k].slice();
+  links = {}; for (const k in d.links || {}) { const l = (links[k] = { off: new Set(), on: new Set() }); for (const [x, y] of d.links[k].off || []) { const i = nearestVert(x, y); if (i >= 0) l.off.add(i); } for (const [x, y] of d.links[k].on || []) { const i = nearestVert(x, y); if (i >= 0) l.on.add(i); } }
+}
+const changed = () => { dirty = true; saveDraft(); draw(); };
 
 function bboxOf(pts) { const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; }
 function fitAlign() {
@@ -141,13 +179,13 @@ function fitView() {
 
 // ---------- Schutzpunkte ----------
 function buildSamples() {
-  const part = $('part').value; samples = []; const memo = {};
+  const part = $('part').value; samples = [];
   for (const b of info.bones) {
     if (b.group !== part || /^schulter/.test(b.name)) continue;
-    const off = cumOff(b.name, memo), mg = /^(schaedel|kiefer)/.test(b.name) ? 0.4 : MARGIN;
+    const mg = /^(schaedel|kiefer)/.test(b.name) ? 0.4 : MARGIN;
     for (const t of b.tris) {
       if (t[9] === 5) continue;
-      const q = [[t[0] + off[0], t[1] + off[1]], [t[2] + off[0], t[3] + off[1]], [t[4] + off[0], t[5] + off[1]]];
+      const q = [bp(b, t[0], t[1]), bp(b, t[2], t[3]), bp(b, t[4], t[5])];
       for (let e = 0; e < 3; e++) { const a = q[e], d = q[(e + 1) % 3], n = Math.max(1, Math.ceil(Math.hypot(d[0] - a[0], d[1] - a[1]) / 0.6)); for (let i = 0; i <= n; i++) samples.push([a[0] + (d[0] - a[0]) * i / n, a[1] + (d[1] - a[1]) * i / n, mg]); }
     }
   }
@@ -169,49 +207,72 @@ function pushOut(p) {
 function inPoly(x, y, poly) { let r = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) r = !r; } return r; }
 function outsideSamples() { if (dirty || !grid) buildSamples(); const poly = work[$('part').value]; return samples.filter((s) => !inPoly(s[0], s[1], poly)); }
 
+// ---------- Fäden (Haut-Haftung) ----------
+function effLinks(name) {   // Menge der Hautpunkte, die an diesem Knochen hängen
+  const idx = NAMES.indexOf(name), set = new Set();
+  for (const [vi, bi] of info.attach) if (bi === idx) set.add(vi);
+  const l = links[name];
+  if (l) { for (const i of l.off) set.delete(i); for (const i of l.on) set.add(i); }
+  return set;
+}
+function nearestOnBone(b, x, y) {
+  const a = bp(b, b.core[0][0], b.core[0][1]), d = bp(b, b.core[1][0], b.core[1][1]), vx = d[0] - a[0], vy = d[1] - a[1], l2 = vx * vx + vy * vy || 1;
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (y - a[1]) * vy) / l2)); return [a[0] + vx * t, a[1] + vy * t];
+}
+
 // ---------- Zeichnen ----------
 let raf = 0;
 function draw() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; paint(); }); }
 function path(poly) { c.beginPath(); poly.forEach(([x, y], i) => { const [sx, sy] = cmToScr(x, y); i ? c.lineTo(sx, sy) : c.moveTo(sx, sy); }); c.closePath(); }
+const depthOf = (n) => { let d = 0, b = BN[n]; while (b && b.parent) { d++; b = BN[b.parent]; } return d; };
 function paint() {
   c.setTransform(dpr, 0, 0, dpr, 0, 0); c.fillStyle = '#0c0909'; c.fillRect(0, 0, cw, ch);
   if (ref) { c.globalAlpha = +$('alpha').value; c.drawImage(ref, view.px, view.py, ref.width * view.z, ref.height * view.z); c.globalAlpha = 1; }
   if (!info) { c.fillStyle = '#6a5a5a'; c.font = '15px system-ui'; c.textAlign = 'center'; c.fillText('Lädt …', cw / 2, ch / 2); return; }
-  const part = $('part').value, k = K(), memo = {};
-  // Knochen
+  const part = $('part').value;
+  const subs = sel ? ($('withKids').checked ? subtree(sel) : new Set([sel])) : null;
   if ($('showBones').checked) {
-    const subs = sel ? subtree(sel) : null, poly = work[part];
-    const order = [...info.bones].sort((a, b) => 0);
-    for (let layer = 0; layer < 5; layer++) for (const b of order) {
-      const off = cumOff(b.name, memo), hl = subs && subs.has(b.name);
-      c.globalAlpha = mode === 'form' || mode === 'align' ? 0.5 : 0.85;
+    for (let layer = 0; layer < 5; layer++) for (const b of info.bones) {
+      const hl = subs && subs.has(b.name);
+      c.globalAlpha = mode === 'bone' ? 0.85 : 0.5;
       for (const t of b.tris) {
         if (t[9] !== layer) continue;
-        const a = cmToScr(t[0] + off[0], t[1] + off[1]), bb = cmToScr(t[2] + off[0], t[3] + off[1]), cc = cmToScr(t[4] + off[0], t[5] + off[1]);
-        c.fillStyle = hl ? `rgb(${Math.min(255, t[6] + 50)},${Math.min(255, t[7] + 40)},${t[8] * 0.4})` : `rgb(${t[6]},${t[7]},${t[8]})`;
-        c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(bb[0], bb[1]); c.lineTo(cc[0], cc[1]); c.closePath(); c.fill();
+        const a = bp(b, t[0], t[1]), bb = bp(b, t[2], t[3]), cc = bp(b, t[4], t[5]);
+        const A = cmToScr(a[0], a[1]), B = cmToScr(bb[0], bb[1]), C = cmToScr(cc[0], cc[1]);
+        c.fillStyle = hl ? (b.name === sel ? `rgb(255,${Math.min(255, t[7] + 30)},${t[8] * 0.3})` : `rgb(${Math.min(255, t[6] + 40)},${Math.min(255, t[7] + 30)},${t[8] * 0.5})`) : `rgb(${t[6]},${t[7]},${t[8]})`;
+        c.beginPath(); c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); c.lineTo(C[0], C[1]); c.closePath(); c.fill();
       }
     }
     c.globalAlpha = 1;
   }
-  // Umrisse
-  for (const [p] of PARTS) {
-    if (p === part) continue;
-    if (!$('showAll').checked) continue;
-    path(work[p]); c.strokeStyle = 'rgba(160,200,160,.55)'; c.lineWidth = 1.2; c.stroke();
+  // Fäden des gewählten Knochens
+  if (sel && $('showThreads').checked && (mode === 'bone')) {
+    const b = BN[sel], eff = effLinks(sel), idx = NAMES.indexOf(sel), def = new Set(); for (const [vi, bi] of info.attach) if (bi === idx) def.add(vi);
+    const linkMode = boneAct === 'link';
+    info.verts.forEach((v, i) => {
+      if (v.g !== b.group && !(b.group === 'torso')) return;
+      const grpOk = (b.group === v.g) || (/^schulter/.test(b.name) && v.g === 'torso'); if (!grpOk) return;
+      const on = eff.has(i), was = def.has(i);
+      if (!on && !(linkMode)) return;
+      const p = cmToScr(v.x, v.y);
+      if (on) { const q = nearestOnBone(b, v.x, v.y), Q = cmToScr(q[0], q[1]); c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(Q[0], Q[1]); c.strokeStyle = was ? 'rgba(80,220,255,.75)' : 'rgba(120,255,120,.95)'; c.lineWidth = 1; c.stroke(); c.fillStyle = was ? '#50dcff' : '#78ff78'; c.fillRect(p[0] - 2, p[1] - 2, 4, 4); }
+      else { c.fillStyle = was ? '#ff5050' : 'rgba(255,255,255,.35)'; c.fillRect(p[0] - 2, p[1] - 2, 4, 4); if (was) { c.strokeStyle = '#ff5050'; c.beginPath(); c.moveTo(p[0] - 4, p[1] - 4); c.lineTo(p[0] + 4, p[1] + 4); c.moveTo(p[0] + 4, p[1] - 4); c.lineTo(p[0] - 4, p[1] + 4); c.stroke(); } }
+    });
   }
-  // Grundform (gestrichelt) und aktuelle Form des gewählten Teils
+  for (const [p] of PARTS) { if (p === part || !$('showAll').checked) continue; path(work[p]); c.strokeStyle = 'rgba(160,200,160,.55)'; c.lineWidth = 1.2; c.stroke(); }
   c.setLineDash([5, 4]); path(info.base[part]); c.strokeStyle = 'rgba(200,200,200,.5)'; c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
   path(work[part]); c.fillStyle = 'rgba(255,60,60,.12)'; c.fill(); c.strokeStyle = '#ff5050'; c.lineWidth = 2; c.stroke();
   if (mode === 'form') for (const [x, y] of work[part]) { const [sx, sy] = cmToScr(x, y); c.beginPath(); c.arc(sx, sy, 5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); c.strokeStyle = '#a00'; c.lineWidth = 1; c.stroke(); }
-  // Knochen, die aus der Haut ragen
   const out = outsideSamples(); c.fillStyle = '#ff2020';
   for (let i = 0; i < out.length && i < 600; i++) { const [sx, sy] = cmToScr(out[i][0], out[i][1]); c.fillRect(sx - 1.5, sy - 1.5, 3, 3); }
-  if (mode === 'bone') for (const j of info.joints) { const o = cumOff(BN[j.b] && BN[j.a] && (depthOf(j.a) > depthOf(j.b) ? j.a : j.b), memo); const [sx, sy] = cmToScr(j.x + o[0], j.y + o[1]); c.beginPath(); c.arc(sx, sy, 3, 0, 6.3); c.fillStyle = '#ffd84a'; c.fill(); }
-  $('status').textContent = (mode === 'align' ? 'Ausrichten: Ebene schieben/skalieren, Figur bleibt. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : ($('allowBones').checked ? 'Knochen: antippen und ziehen, Gelenke und Anhang wandern mit. ' : 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ')) + (out.length ? `Rot: ${out.length} Knochenpunkte ragen aus der Haut.` : '');
+  if (mode === 'bone') {
+    for (const j of info.joints) { const ch2 = depthOf(j.a) > depthOf(j.b) ? j.a : j.b; const o = bp(BN[ch2], j.x, j.y); const [sx, sy] = cmToScr(o[0], o[1]); c.beginPath(); c.arc(sx, sy, 3, 0, 6.3); c.fillStyle = '#ffd84a'; c.fill(); }
+    if (sel) { const q = pivotOf(sel), [sx, sy] = cmToScr(q[0], q[1]); c.beginPath(); c.arc(sx, sy, 9, 0, 6.3); c.strokeStyle = '#ffd84a'; c.lineWidth = 2.5; c.stroke(); c.beginPath(); c.arc(sx, sy, 2.5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); }
+  }
+  const nl = sel ? effLinks(sel).size : 0;
+  const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen. ' : boneAct === 'move' ? `${sel}: ziehen = verschieben${$('withKids').checked ? ' (mit Anhang)' : ' (nur dieser Knochen)'}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Drehpunkt (gelber Ring) drehen. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
+  $('status').textContent = draftNote + (mode === 'align' ? 'Ausrichten: Ebene schieben/skalieren, Figur bleibt. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : hintBone) + (out.length ? `Rot: ${out.length} Knochenpunkte ragen aus der Haut.` : '');
 }
-const depthMemo = {};
-function depthOf(n) { let d = 0, b = BN[n]; while (b && b.parent) { d++; b = BN[b.parent]; } return d; }
 
 // ---------- Bedienung ----------
 const ptrs = new Map(); let drag = null, pinch = null;
@@ -224,6 +285,12 @@ const pos = (e) => {
 };
 function zoomView(f, cx, cy) { const nz = Math.min(fitZ * 8, Math.max(fitZ * 0.2, view.z * f)); f = nz / view.z; view.px = cx - (cx - view.px) * f; view.py = cy - (cy - view.py) * f; view.z = nz; $('zoom').value = Math.min(6, Math.max(0.25, view.z / fitZ)); }
 function zoomAlign(f, cx, cy) { const [ix, iy] = scrToImg(cx, cy); const ns = Math.min(alignS0 * 3, Math.max(alignS0 * 0.3, align.s * f)); f = ns / align.s; align.tx = ix - (ix - align.tx) * f; align.ty = iy - (iy - align.ty) * f; align.s = ns; $('asc').value = align.s / alignS0; }
+function inTri(x, y, t) { const d1 = (x - t[2]) * (t[1] - t[3]) - (t[0] - t[2]) * (y - t[3]), d2 = (x - t[4]) * (t[3] - t[5]) - (t[2] - t[4]) * (y - t[5]), d3 = (x - t[0]) * (t[5] - t[1]) - (t[4] - t[0]) * (y - t[1]); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); }
+function pickBone(x, y) {
+  let best = null, bl = -1;
+  info.bones.forEach((b, bi) => { for (const t of b.tris) { if (t[9] === 5) continue; const a = bp(b, t[0], t[1]), bb = bp(b, t[2], t[3]), cc = bp(b, t[4], t[5]); if (inTri(x, y, [a[0], a[1], bb[0], bb[1], cc[0], cc[1]]) && t[9] * 1000 + bi >= bl) { bl = t[9] * 1000 + bi; best = b.name; } } });
+  return best;
+}
 cv.addEventListener('pointerdown', (e) => {
   if (!info) return; const p = pos(e); ptrs.set(e.pointerId, p); cv.setPointerCapture(e.pointerId); e.preventDefault();
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; drag = null; return; }
@@ -232,68 +299,74 @@ cv.addEventListener('pointerdown', (e) => {
     const pts = work[part]; let bi = -1, bd = 15;
     pts.forEach(([x, y], i) => { const [sx, sy] = cmToScr(x, y); const d = Math.hypot(sx - p[0], sy - p[1]); if (d < bd) { bd = d; bi = i; } });
     if (bi < 0) {
-      let be = -1, bt = 0, bdist = 11; const n = pts.length;
+      let be = -1, bt = 0, bdist = 10; const n = pts.length;
       for (let i = 0; i < n; i++) { const a = cmToScr(...pts[i]), b = cmToScr(...pts[(i + 1) % n]); const vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy || 1; const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l2)); const d = Math.hypot(a[0] + vx * t - p[0], a[1] + vy * t - p[1]); if (d < bdist) { bdist = d; be = i; bt = t; } }
       if (be >= 0) { const a = pts[be], b = pts[(be + 1) % n]; pts.splice(be + 1, 0, [a[0] + (b[0] - a[0]) * bt, a[1] + (b[1] - a[1]) * bt]); bi = be + 1; }
     }
     drag = bi >= 0 ? { kind: 'pt', i: bi } : { kind: 'pan', last: p };
   } else if (mode === 'bone' && $('allowBones').checked) {
-    const [x, y] = scrToCm(p[0], p[1]); const memo = {}; let best = null, bl = -1;
-    info.bones.forEach((b, bi) => { const off = cumOff(b.name, memo); for (const t of b.tris) { if (t[9] === 5) continue; if (inTri(x - off[0], y - off[1], t) && t[9] * 1000 + bi >= bl) { bl = t[9] * 1000 + bi; best = b.name; } } });
-    sel = best; drag = best ? { kind: 'bone', last: p } : { kind: 'pan', last: p }; draw();
+    const [x, y] = scrToCm(p[0], p[1]);
+    if (boneAct === 'link' && sel) {
+      const b = BN[sel]; let bi = -1, bd = 14;
+      info.verts.forEach((v, i) => { const grpOk = (b.group === v.g) || (/^schulter/.test(b.name) && v.g === 'torso'); if (!grpOk) return; const s = cmToScr(v.x, v.y), d = Math.hypot(s[0] - p[0], s[1] - p[1]); if (d < bd) { bd = d; bi = i; } });
+      if (bi >= 0) { const l = links[sel] || (links[sel] = { off: new Set(), on: new Set() }); const idx = NAMES.indexOf(sel); const was = info.attach.some(([vi, b2]) => vi === bi && b2 === idx); if (l.off.has(bi)) l.off.delete(bi); else if (l.on.has(bi)) l.on.delete(bi); else if (was) l.off.add(bi); else l.on.add(bi); changed(); return; }
+    }
+    const hit = pickBone(x, y);
+    if (hit) { sel = hit; drag = { kind: boneAct === 'rot' ? 'rot' : boneAct === 'move' ? 'bone' : 'pan', last: p }; } else drag = { kind: 'pan', last: p };
+    draw();
   } else if (mode === 'align') drag = { kind: 'align', last: p };
   else drag = { kind: 'pan', last: p };
 });
-function inTri(x, y, t) { const d1 = (x - t[2]) * (t[1] - t[3]) - (t[0] - t[2]) * (y - t[3]), d2 = (x - t[4]) * (t[3] - t[5]) - (t[2] - t[4]) * (y - t[5]), d3 = (x - t[0]) * (t[5] - t[1]) - (t[4] - t[0]) * (y - t[1]); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); }
 cv.addEventListener('pointermove', (e) => {
   if (!ptrs.has(e.pointerId)) return; const p = pos(e); ptrs.set(e.pointerId, p);
   if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; const f = d / (pinch.d || 1); if (mode === 'align') { zoomAlign(f, mx, my); align.tx += (mx - pinch.mx) / view.z; align.ty += (my - pinch.my) / view.z; } else { zoomView(f, mx, my); view.px += mx - pinch.mx; view.py += my - pinch.my; } pinch = { d, mx, my }; draw(); return; }
   if (!drag) return;
   const part = $('part').value;
-  if (drag.kind === 'pt') { const [x, y] = scrToCm(p[0], p[1]); const q = [x, y]; if ($('protect').checked) pushOut(q); work[part][drag.i] = q; }
+  if (drag.kind === 'pt') { const [x, y] = scrToCm(p[0], p[1]); const q = [x, y]; if ($('protect').checked) pushOut(q); work[part][drag.i] = q; saveDraft(); }
   else if (drag.kind === 'pan') { view.px += p[0] - drag.last[0]; view.py += p[1] - drag.last[1]; drag.last = p; }
   else if (drag.kind === 'align') { align.tx += (p[0] - drag.last[0]) / view.z; align.ty += (p[1] - drag.last[1]) / view.z; drag.last = p; }
-  else if (drag.kind === 'bone' && sel) { const k = K(); const o = boneOff[sel] || (boneOff[sel] = [0, 0]); o[0] += (p[0] - drag.last[0]) / k; o[1] += (p[1] - drag.last[1]) / k; drag.last = p; dirty = true; }
+  else if (drag.kind === 'bone' && sel) { const k = K(), e2 = [(p[0] - drag.last[0]) / k, (p[1] - drag.last[1]) / k]; for (const n of ($('withKids').checked ? subtree(sel) : [sel])) moveBody(n, 0, [0, 0], e2); drag.last = p; dirty = true; saveDraft(); }
+  else if (drag.kind === 'rot' && sel) { const q = pivotOf(sel), qs = cmToScr(q[0], q[1]); const a1 = Math.atan2(drag.last[1] - qs[1], drag.last[0] - qs[0]), a2 = Math.atan2(p[1] - qs[1], p[0] - qs[0]); let phi = a2 - a1; if (phi > Math.PI) phi -= 2 * Math.PI; if (phi < -Math.PI) phi += 2 * Math.PI; for (const n of ($('withKids').checked ? subtree(sel) : [sel])) moveBody(n, phi, q, [0, 0]); drag.last = p; dirty = true; saveDraft(); }
   draw();
 });
-const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) { if (drag && drag.kind === 'bone') updateInfo(); drag = null; } draw(); };
+const up = (e) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('dblclick', (e) => {
   if (mode !== 'form' || !info) return; const p = pos(e), pts = work[$('part').value]; if (pts.length <= 6) return;
   let bi = -1, bd = 15; pts.forEach(([x, y], i) => { const [sx, sy] = cmToScr(x, y); const d = Math.hypot(sx - p[0], sy - p[1]); if (d < bd) { bd = d; bi = i; } });
-  if (bi >= 0) { pts.splice(bi, 1); draw(); }
+  if (bi >= 0) { pts.splice(bi, 1); changed(); }
 });
 cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); (mode === 'align' ? zoomAlign : zoomView)(e.deltaY < 0 ? 1.1 : 1 / 1.1, p[0], p[1]); draw(); }, { passive: false });
 
-function setMode(m) { mode = m; for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone']]) $(id).classList.toggle('sel', m === mm); draw(); }
+function setMode(m) { mode = m; for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone']]) $(id).classList.toggle('sel', m === mm); $('boneRow').style.display = m === 'bone' ? '' : 'none'; resize(); }
+function setAct(a) { boneAct = a; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); draw(); }
 $('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone');
+$('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bLink').onclick = () => setAct('link');
+$('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
+$('bFree').onclick = () => { if (!sel) return; for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
 $('zoom').addEventListener('input', () => { const nz = fitZ * +$('zoom').value, f = nz / view.z; zoomView(f, cw / 2, ch / 2); draw(); });
 $('asc').addEventListener('input', () => { const ns = alignS0 * +$('asc').value; zoomAlign(ns / align.s, cw / 2, ch / 2); draw(); });
 $('alpha').addEventListener('input', draw);
-for (const id of ['showBones', 'showAll', 'protect']) $(id).addEventListener('change', draw);
+for (const id of ['showBones', 'showAll', 'protect', 'showThreads', 'withKids']) $(id).addEventListener('change', draw);
 $('menu').onclick = () => { $('drawer').classList.toggle('open'); resize(); };
 $('menuClose').onclick = () => { $('drawer').classList.remove('open'); resize(); };
-$('info').textContent = 'Ablauf: Referenzbild laden, mit „1 Ausrichten“ die Figur-Ebene ans Bild anpassen, dann in „2 Form“ die Punkte ziehen (Linie antippen = Punkt hinzufügen, Doppeltipp = löschen). Knochen nur mit Haken „Knochen verschiebbar“. Schutzabstand hält die Haut von Knochen fern. Mit zwei Fingern lässt sich zoomen.';
+$('info').textContent = 'Ablauf: Referenzbild laden, mit „1 Ausrichten“ die Figur-Ebene ans Bild anpassen, dann in „2 Form“ die Punkte ziehen (Linie antippen = Punkt hinzufügen, Doppeltipp = löschen). „3 Knochen“: Knochen antippen, verschieben oder drehen (Ring = Drehpunkt), „mit Anhang“ nimmt angehängte Knochen mit. „Fäden“ zeigt, wo die Haut am gewählten Knochen hängt: Punkt antippen löst oder setzt einen Faden. Alles wird laufend als Entwurf gesichert; „Übernehmen“ speichert fest und startet neu.';
 $('rot').addEventListener('change', () => { rot = +$('rot').value; try { localStorage.setItem('zd_form_rot', String(rot)); } catch (e) {} resize(); fitView(); draw(); });
 try { const r0 = localStorage.getItem('zd_form_rot'); if (r0 === '90' || r0 === '-90') { rot = +r0; $('rot').value = r0; } } catch (e) {}
 $('allowBones').addEventListener('change', () => { if ($('allowBones').checked) setMode('bone'); draw(); });
 $('part').addEventListener('change', () => { dirty = true; fitAlign(); draw(); });
 $('kind').addEventListener('change', () => post({ zdForm: 'need', kind: $('kind').value }));
 $('file').onchange = (e) => { const f = e.target.files[0]; if (!f) return; const url = URL.createObjectURL(f), im = new Image(); im.onload = () => { ref = im; for (const k in aligns) delete aligns[k]; fitView(); fitAlign(); draw(); }; im.src = url; };
-function updateInfo() { dirty = true; draw(); }
-$('resetPart').onclick = () => { const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); draw(); };
-$('resetAll').onclick = () => { for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); boneOff = {}; dirty = true; draw(); };
-$('resetBones').onclick = () => { boneOff = {}; sel = null; dirty = true; draw(); };
-$('apply').onclick = () => {
-  const data = { outlines: {}, bones: {} };
-  for (const [p] of PARTS) if (JSON.stringify(work[p].map((q) => q.map((v) => Math.round(v * 100) / 100))) !== JSON.stringify(info.base[p])) data.outlines[p] = work[p].map((q) => [Math.round(q[0] * 100) / 100, Math.round(q[1] * 100) / 100]);
-  for (const k in boneOff) if (Math.abs(boneOff[k][0]) > 0.005 || Math.abs(boneOff[k][1]) > 0.005) data.bones[k] = [Math.round(boneOff[k][0] * 100) / 100, Math.round(boneOff[k][1] * 100) / 100];
-  post({ zdForm: 'save', kind: info.kind, data });
-};
+$('resetPart').onclick = () => { const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
+$('resetAll').onclick = () => { for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; links = {}; clearDraft(info.kind); changed(); };
+$('resetBones').onclick = () => { T = {}; sel = null; changed(); };
+$('resetLinks').onclick = () => { if (sel) delete links[sel]; else links = {}; changed(); };
+$('apply').onclick = () => { post({ zdForm: 'save', kind: info.kind, data: currentData() }); clearDraft(info.kind); };
 $('close').onclick = () => post({ zdForm: 'close' });
-$('xfer').onclick = () => { $('ta').value = allText; $('taInfo').textContent = 'Text kopieren und sichern – oder einen gesicherten Text hier einfügen und „Einlesen“ drücken.'; $('ovl').classList.add('open'); };
+function exportText() { const kinds = JSON.parse(JSON.stringify(saved)); const d = currentData(); if (isEmpty(d)) delete kinds[info.kind]; else kinds[info.kind] = d; return JSON.stringify({ zdShapes: 1, kinds }); }
+$('xfer').onclick = () => { $('ta').value = exportText(); $('taInfo').textContent = 'Das ist der Stand dieses Editors (auch nicht übernommene Änderungen). Text kopieren und sichern – oder gesicherten Text hier einfügen und „Einlesen“ drücken.'; $('ovl').classList.add('open'); };
 $('taClose').onclick = () => $('ovl').classList.remove('open');
-$('taCopy').onclick = () => { $('ta').select(); try { navigator.clipboard.writeText($('ta').value); } catch (e) { document.execCommand('copy'); } };
+$('taCopy').onclick = () => { $('ta').select(); try { navigator.clipboard.writeText($('ta').value); $('taInfo').textContent = 'Kopiert.'; } catch (e) { document.execCommand('copy'); } };
 $('taLoad').onclick = () => post({ zdForm: 'import', text: $('ta').value, kind: info ? info.kind : 'zombie' });
 function post(m) { if (EMB) window.parent.postMessage(m, '*'); }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormInfo) return; if (d.error) { $('taInfo').textContent = d.error; return; } setInfo(d); $('ovl').classList.remove('open'); });
