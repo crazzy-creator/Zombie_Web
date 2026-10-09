@@ -309,7 +309,7 @@ function bpInv(b, t, X, Y) {
 function fitOutlines() {
   if (!info) return 0; let n = 0;
   for (const [part] of PARTS) {
-    const bs = info.bones.filter((b) => b.group === part && b.core && b.core.length >= 2); if (!bs.length) continue;
+    const bs = info.bones.filter((b) => b.group === part && !b.editorOnly && b.core && b.core.length >= 2); if (!bs.length) continue;
     const Tf = TF[part] || {};
     const segs = bs.map((b) => [b, bpT(b, Tf[b.name], b.core[0][0], b.core[0][1]), bpT(b, Tf[b.name], b.core[1][0], b.core[1][1])]);
     let any = false; for (const b of bs) { const a = Tf[b.name] || [0, 0, 0, 1, 1], c2 = T[b.name] || [0, 0, 0, 1, 1]; if (JSON.stringify(a) !== JSON.stringify(c2)) { any = true; break; } }
@@ -317,7 +317,7 @@ function fitOutlines() {
     const nw = work[part].map(([x, y]) => {
       let sw = 0, sx = 0, sy = 0;
       for (const [b, e0, e1] of segs) {
-        const vx = e1[0] - e0[0], vy = e1[1] - e0[1], l2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((x - e0[0]) * vx + (y - e0[1]) * vy) / l2)), d = Math.hypot(e0[0] + vx * t - x, e0[1] + vy * t - y), w = 1 / Math.pow(d + 0.6, 3);
+        const vx = e1[0] - e0[0], vy = e1[1] - e0[1], l2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((x - e0[0]) * vx + (y - e0[1]) * vy) / l2)), d = Math.hypot(e0[0] + vx * t - x, e0[1] + vy * t - y), w = 1 / Math.pow(d + 1.5, 2);
         const q = bpT(b, T[b.name], ...bpInv(b, Tf[b.name], x, y)); sw += w; sx += w * q[0]; sy += w * q[1];
       }
       return [sx / sw, sy / sw];
@@ -725,7 +725,7 @@ $('apply').onclick = async () => {
   if (resetSkins) { for (const [p] of PARTS) await kvDel(`skin/${kind}/${p}`); resetSkins = false; }
   let made = [];
   if ($('useRef').checked && ref) for (const [p, l] of PARTS) { const key = kind + '/' + ($('solo').checked ? p : 'all'); if (!touched[key]) continue; const sk = genSkin(p); if (sk) { await kvSet(`skin/${kind}/${p}`, sk); made.push(l); } }
-  post({ zdForm: 'save', kind, data }); clearDraft(kind);
+  post({ zdForm: 'save', kind, data }); saveDraft();
 };
 $('close').onclick = () => post({ zdForm: 'close' });
 function exportText() { const kinds = JSON.parse(JSON.stringify(saved)); const d = currentData(); if (isEmpty(d)) delete kinds[info.kind]; else kinds[info.kind] = d; return JSON.stringify({ zdShapes: 1, kinds }); }
