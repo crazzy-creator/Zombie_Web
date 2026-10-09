@@ -96,7 +96,7 @@
       <div class="row">
         <label><input id="allowBones" type="checkbox" checked> Knochen verschiebbar</label>
         <label><input id="withKids" type="checkbox"> mit Anhang</label>
-        <label title="Der Umriss des Körperteils folgt den Knochen, sobald du einen Knochen loslässt"><input id="autoFit" type="checkbox" checked> Umriss folgt Knochen</label>
+        <button id="bFit" title="Alle Körperteil-Umrisse an die jetzige Knochenlage anpassen (rückgängig machbar)">Umriss an Knochen anpassen</button>
         <button id="bPivot">Drehpunkt: Gelenk</button>
         <button id="bFree">Knochen zurück</button>
       </div>
@@ -229,11 +229,11 @@ async function setInfo(msg) {
   if (msg.native) $('rotLbl').style.display = 'none';
   info = msg.info; saved = msg.saved || {}; BN = {}; NAMES = info.bones.map((b) => b.name); for (const b of info.bones) BN[b.name] = b;
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
-  T = {}; Tfit = {}; const cust = msg.custom;
+  T = {}; TF = {}; const cust = msg.custom;
   if (cust) for (const k in cust.bones || {}) T[k] = tFrom(cust.bones[k]);
   O = {}; if (cust) for (const k in cust.organs || {}) O[k] = cust.organs[k].slice();
   links = linksFrom(cust && cust.links);
-  Tfit = cloneT();
+  baseline();
   let note = '';
   if (!msg.fresh) { const d = loadDraft(info.kind); if (d) { applyDraft(d); note = 'Entwurf geladen. '; } }
   // Bone-Auswahl
@@ -275,7 +275,7 @@ function currentData() {
 function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length; }
 let draftTimer = 0;
 function fingerData() { const o = {}; for (const k in T) if (BN[k] && BN[k].editorOnly && hasT(T[k])) o[k] = T[k].map((v) => Math.round(v * 1000) / 1000); return o; }
-function saveDraft() { schedulePreview(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fingers = fingerData(); if (isEmpty(d) && !Object.keys(d.fingers).length) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
+function saveDraft() { schedulePreview(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fingers = fingerData(); d.fit = TF; if (isEmpty(d) && !Object.keys(d.fingers).length) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
 function loadDraft(kind) { try { return (JSON.parse(localStorage.getItem(DRAFT) || '{}')[kind] || {}).data || null; } catch (e) { return null; } }
 function clearDraft(kind) { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); delete all[kind]; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }
 function applyDraft(d) {
@@ -283,13 +283,15 @@ function applyDraft(d) {
   T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = tFrom(d.bones[k]);
   for (const k in d.fingers || {}) if (BN[k]) T[k] = tFrom(d.fingers[k]);
   O = {}; for (const k in d.organs || {}) O[k] = d.organs[k].slice();
-  links = linksFrom(d.links); Tfit = cloneT();
+  links = linksFrom(d.links); if (d.fit) TF = d.fit; else baseline();
 }
 
 // ---------- Rückgängig / Wiederholen ----------
 let undoStack = [], redoStack = [];
 // ---------- Umriss folgt den Knochen: Tfit = Knochen-Lage, zu der die Umrisse gerade passen ----------
-let Tfit = {};
+let TF = {};   // je Körperteil: Knochen-Lage, zu der der Umriss gerade passt
+const sameBase = (p) => JSON.stringify(work[p].map((q) => q.map((v) => Math.round(v * 100) / 100))) === JSON.stringify(info.base[p]);
+function baseline() { TF = {}; for (const [p] of PARTS) TF[p] = sameBase(p) ? {} : cloneT(); }
 const cloneT = () => JSON.parse(JSON.stringify(T));
 function bpT(b, t, x, y) {
   if (!t) return [x, y];
@@ -305,26 +307,28 @@ function bpInv(b, t, X, Y) {
   return [b.cx + cg * lx - sg * ly, b.cy + sg * lx + cg * ly];
 }
 function fitOutlines() {
-  if (!info) return;
+  if (!info) return 0; let n = 0;
   for (const [part] of PARTS) {
     const bs = info.bones.filter((b) => b.group === part && b.core && b.core.length >= 2); if (!bs.length) continue;
-    const segs = bs.map((b) => [b, bpT(b, Tfit[b.name], b.core[0][0], b.core[0][1]), bpT(b, Tfit[b.name], b.core[1][0], b.core[1][1])]);
-    let any = false; for (const b of bs) { const a = Tfit[b.name] || [0, 0, 0, 1, 1], c2 = T[b.name] || [0, 0, 0, 1, 1]; if (JSON.stringify(a) !== JSON.stringify(c2)) { any = true; break; } }
+    const Tf = TF[part] || {};
+    const segs = bs.map((b) => [b, bpT(b, Tf[b.name], b.core[0][0], b.core[0][1]), bpT(b, Tf[b.name], b.core[1][0], b.core[1][1])]);
+    let any = false; for (const b of bs) { const a = Tf[b.name] || [0, 0, 0, 1, 1], c2 = T[b.name] || [0, 0, 0, 1, 1]; if (JSON.stringify(a) !== JSON.stringify(c2)) { any = true; break; } }
     if (!any) continue;
-    work[part] = work[part].map(([x, y]) => {
+    const nw = work[part].map(([x, y]) => {
       let sw = 0, sx = 0, sy = 0;
       for (const [b, e0, e1] of segs) {
         const vx = e1[0] - e0[0], vy = e1[1] - e0[1], l2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((x - e0[0]) * vx + (y - e0[1]) * vy) / l2)), d = Math.hypot(e0[0] + vx * t - x, e0[1] + vy * t - y), w = 1 / Math.pow(d + 0.6, 3);
-        const q = bpT(b, T[b.name], ...bpInv(b, Tfit[b.name], x, y)); sw += w; sx += w * q[0]; sy += w * q[1];
+        const q = bpT(b, T[b.name], ...bpInv(b, Tf[b.name], x, y)); sw += w; sx += w * q[0]; sy += w * q[1];
       }
       return [sx / sw, sy / sw];
     });
+    work[part] = nw; TF[part] = cloneT(); n++;
   }
-  Tfit = cloneT(); dirty = true; skinCache = null;
+  dirty = true; skinCache = null; return n;
 }
-const autoFitNow = () => { if ($('autoFit').checked) { fitOutlines(); } else Tfit = cloneT(); };
-const snap = () => JSON.stringify({ w: work, t: T, f: Tfit, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
-function restore(s) { const o = JSON.parse(s); work = o.w; T = o.t; Tfit = o.f || {}; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
+
+const snap = () => JSON.stringify({ w: work, t: T, f: TF, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
+function restore(s) { const o = JSON.parse(s); work = o.w; T = o.t; TF = o.f || {}; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
 function pushUndo() { const s = snap(); if (undoStack[undoStack.length - 1] !== s) { undoStack.push(s); if (undoStack.length > 60) undoStack.shift(); } redoStack = []; }
 function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); }
 function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); }
@@ -651,8 +655,7 @@ cv.addEventListener('pointermove', (e) => {
     drag.last = p; dirty = true; saveDraft(); }
   draw();
 });
-const up = (e) => { if (drag && ['bone', 'rot', 'scale', 'span'].includes(drag.kind) && ptrs.size <= 1) autoFitNow();
-  if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && e.type === 'pointerup' && mode === 'bone' && boneAct === 'span' && $('allowBones').checked) { const [x, y] = scrToCm(pinch.x0, pinch.y0), h4 = pickBone(x, y); if (h4) { sel = h4; $('boneSel').value = h4; } pinch.moved = true; }
+const up = (e) => { if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && e.type === 'pointerup' && mode === 'bone' && boneAct === 'span' && $('allowBones').checked) { const [x, y] = scrToCm(pinch.x0, pinch.y0), h4 = pickBone(x, y); if (h4) { sel = h4; $('boneSel').value = h4; } pinch.moved = true; }
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('dblclick', (e) => {
@@ -674,9 +677,10 @@ $('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode
 $('oMove').onclick = () => setOrgAct('move'); $('oRot').onclick = () => setOrgAct('rot'); $('oScale').onclick = () => setOrgAct('scale');
 $('orgSel').onchange = () => { selOrg = $('orgSel').value || null; draw(); };
 $('resetOrgans').onclick = () => { pushUndo(); O = {}; selOrg = null; changed(); };
+$('bFit').onclick = () => { pushUndo(); const n = fitOutlines(); draftNote = n ? `Umrisse angepasst (${n} Teile). ` : 'Nichts anzupassen – Knochen unverändert. '; changed(); };
 $('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link'); $('bSpan').onclick = () => setAct('span');
 $('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
-$('bFree').onclick = () => { if (!sel) return; pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; autoFitNow(); changed(); };
+$('bFree').onclick = () => { if (!sel) return; pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
 $('boneSel').onchange = () => { sel = $('boneSel').value || null; draw(); };
 // Feinjustierung der Figur-Ebene
 const nudge = (dx, dy) => { const st = (fineMode ? 0.5 : 4) / view.z; align.tx += dx * st; align.ty += dy * st; alignTouch(); draw(); };
@@ -711,8 +715,8 @@ $('undo').onclick = undo; $('redo').onclick = redo;
 window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); } });
 $('check').onclick = () => { if (info) showCheck(); };
 $('resetPart').onclick = () => { pushUndo(); const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
-$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; Tfit = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
-$('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; autoFitNow(); changed(); };
+$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; TF = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
+$('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; changed(); };
 $('resetLinks').onclick = () => { pushUndo(); if (sel) delete links[sel]; else links = {}; changed(); };
 let resetSkins = false;
 $('apply').onclick = async () => {
