@@ -89,12 +89,13 @@
         <button id="bMove" class="sel">Verschieben</button>
         <button id="bRot">Drehen</button>
         <button id="bScale">Skalieren</button>
+        <button id="bSpan" title="Knochen auf der Textur von Gelenk zu Gelenk legen">Start→Ende</button>
         <button id="bLink">Fäden</button>
         <span id="kScale" style="display:none"><label><input id="kLen" type="checkbox" checked> Länge</label> <label><input id="kWid" type="checkbox" checked> Breite</label></span>
       </div>
       <div class="row">
         <label><input id="allowBones" type="checkbox"> Knochen verschiebbar</label>
-        <label><input id="withKids" type="checkbox" checked> mit Anhang</label>
+        <label><input id="withKids" type="checkbox"> mit Anhang</label>
         <button id="bPivot">Drehpunkt: Gelenk</button>
         <button id="bFree">Knochen zurück</button>
       </div>
@@ -166,8 +167,12 @@ window.addEventListener('resize', resize);
 // ---------- Koordinaten: cm -(Figur-Ebene: Maßstab, Drehung, Verschiebung)-> Bild -(Ansicht)-> Schirm ----------
 const kap = () => S0 * align.s;
 const rr = () => (align.r * Math.PI) / 180;
-function cmToImg(x, y) { const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a); return [align.tx + k * (x * co - y * si), align.ty + k * (x * si + y * co)]; }
-function imgToCm(ix, iy) { const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a), dx = (ix - align.tx) / k, dy = (iy - align.ty) / k; return [dx * co + dy * si, -dx * si + dy * co]; }
+function ensureMc(a, part) { if ((a.mx || a.my) && !a.mc && work && work[part]) { const bb = bboxOf(work[part]); a.mc = { cc: [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], al: partAxis(work[part]) }; } }
+function reflOf(a, sg) { const c2 = Math.cos(a.mc.al), s2 = Math.sin(a.mc.al), cc = a.mc.cc, R = [sg * (2 * c2 * c2 - 1), sg * 2 * c2 * s2, sg * 2 * c2 * s2, sg * (2 * s2 * s2 - 1)]; return [R[0], R[2], R[1], R[3], cc[0] - R[0] * cc[0] - R[1] * cc[1], cc[1] - R[2] * cc[0] - R[3] * cc[1]]; }
+function Rtot(a) { if (!a.mx && !a.my) return null; if (!a.mc) ensureMc(a, $('part').value); if (!a.mc) return null; let m = a.my ? reflOf(a, -1) : null; if (a.mx) m = m ? mmul(reflOf(a, 1), m) : reflOf(a, 1); return m; }
+const applyM = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+function cmToImg(x, y) { const R = Rtot(align); if (R) [x, y] = applyM(R, x, y); const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a); return [align.tx + k * (x * co - y * si), align.ty + k * (x * si + y * co)]; }
+function imgToCm(ix, iy) { const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a), dx = (ix - align.tx) / k, dy = (iy - align.ty) / k, r = [dx * co + dy * si, -dx * si + dy * co], R = Rtot(align); return R ? applyM(R, r[0], r[1]) : r; }
 const cmToScr = (x, y) => { const [ix, iy] = cmToImg(x, y); return [ix * view.z + view.px, iy * view.z + view.py]; };
 const scrToImg = (sx, sy) => [(sx - view.px) / view.z, (sy - view.py) / view.z];
 const scrToCm = (sx, sy) => { const [ix, iy] = scrToImg(sx, sy); return imgToCm(ix, iy); };
@@ -434,10 +439,9 @@ function skinCanvas(part, a) {
   g.fillStyle = '#777'; g.fillRect(0, 0, TW, TH);
   const k = S0 * a.s, r = (a.r * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r), fx = TW / bw, fy = TH / bh;
   let m = [co / k, -si / k, si / k, co / k, (-a.tx * co - a.ty * si) / k, (a.tx * si - a.ty * co) / k];    // Bild -> cm
-  const cc = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], al = partAxis(work[part]), c2 = Math.cos(al), s2 = Math.sin(al);
-  const refl = (sg) => { const R = [sg * (2 * c2 * c2 - 1), sg * 2 * c2 * s2, sg * 2 * c2 * s2, sg * (2 * s2 * s2 - 1)]; return [R[0], R[2], R[1], R[3], cc[0] - R[0] * cc[0] - R[1] * cc[1], cc[1] - R[2] * cc[0] - R[3] * cc[1]]; };
-  if (a.mx) m = mmul(refl(1), m);       // quer zur Längsachse spiegeln
-  if (a.my) m = mmul(refl(-1), m);      // entlang der Längsachse spiegeln
+  ensureMc(a, part);
+  if (a.mx) m = mmul(reflOf(a, 1), m);       // quer zur Längsachse spiegeln
+  if (a.my) m = mmul(reflOf(a, -1), m);      // entlang der Längsachse spiegeln
   const q = [fx, 0, 0, fy, -ox * fx, -oy * fy];
   const t = mmul(q, m);
   g.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]);
@@ -464,7 +468,7 @@ function paint() {
     const key = JSON.stringify([part, align, work[part]]);
     if (!skinCache || skinCache.key !== key) skinCache = { key, r: skinCanvas(part, align) };
     const r = skinCache.r, k = kap() * view.z, an = rr(), co = Math.cos(an), si = Math.sin(an);
-    c.save(); path(work[part]); c.clip(); c.setTransform(dpr * k * co, dpr * k * si, -dpr * k * si, dpr * k * co, dpr * (align.tx * view.z + view.px), dpr * (align.ty * view.z + view.py));
+    c.save(); path(work[part]); c.clip(); { const vm = [dpr * k * co, dpr * k * si, -dpr * k * si, dpr * k * co, dpr * (align.tx * view.z + view.px), dpr * (align.ty * view.z + view.py)], RR = Rtot(align), tm = RR ? mmul(vm, RR) : vm; c.setTransform(tm[0], tm[1], tm[2], tm[3], tm[4], tm[5]); }
     c.globalAlpha = 1; c.drawImage(r.cvs, r.ox, r.oy, r.bw, r.bh); c.restore();
   }
   const subs = sel ? ($('withKids').checked ? subtree(sel) : new Set([sel])) : null;
@@ -512,12 +516,13 @@ function paint() {
     for (const j of info.joints) { if (solo && !(BN[j.a].group === part || BN[j.b].group === part)) continue; const ch2 = depthOf(j.a) > depthOf(j.b) ? j.a : j.b; const o = bp(BN[ch2], j.x, j.y); const [sx, sy] = cmToScr(o[0], o[1]); c.beginPath(); c.arc(sx, sy, 3, 0, 6.3); c.fillStyle = '#ffd84a'; c.fill(); }
     if (sel) { const q = pivotOf(sel), [sx, sy] = cmToScr(q[0], q[1]); c.beginPath(); c.arc(sx, sy, 9, 0, 6.3); c.strokeStyle = '#ffd84a'; c.lineWidth = 2.5; c.stroke(); c.beginPath(); c.arc(sx, sy, 2.5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); }
   }
+  if (drag && drag.kind === 'span') { const [x1, y1] = cmToScr(drag.p1[0], drag.p1[1]), [x2, y2] = cmToScr(drag.p2[0], drag.p2[1]); c.strokeStyle = '#4af'; c.lineWidth = 2; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); c.fillStyle = '#4f4'; c.beginPath(); c.arc(x1, y1, 6, 0, 6.3); c.fill(); c.fillStyle = '#f44'; c.beginPath(); c.arc(x2, y2, 6, 0, 6.3); c.fill(); }
   const nl = sel ? effLinks(sel).size : 0, kids = $('withKids').checked ? ' (mit Anhang)' : ' (nur dieser Knochen)';
   const hintOrg = !selOrg ? 'Innerei antippen oder oben wählen. ' : orgAct === 'move' ? `${selOrg}: ziehen = verschieben. ` : orgAct === 'rot' ? `${selOrg}: ziehen = um die Mitte drehen. ` : `${selOrg}: ziehen = größer/kleiner (${$('oLen').checked && $('oWid').checked ? 'gleichmäßig' : $('oLen').checked ? 'nur Länge' : $('oWid').checked ? 'nur Breite' : 'nichts gewählt'}). `;
   const lw = $('kLen').checked && $('kWid').checked ? '' : $('kLen').checked ? ' (nur Länge)' : $('kWid').checked ? ' (nur Breite)' : ' (nichts gewählt)';
-  const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen oder oben wählen. ' : boneAct === 'move' ? `${sel}: ziehen = verschieben${kids}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Ring drehen${kids}. ` : boneAct === 'scale' ? `${sel}: ziehen = größer/kleiner (vom Ring aus)${lw}${kids}. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
+  const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen oder oben wählen. ' : boneAct === 'span' ? `${sel}: auf der Textur Startpunkt antippen und zum Endpunkt ziehen – nur dieser Knochen wird gelegt, Breite danach mit Skalieren. ` : boneAct === 'move' ? `${sel}: ziehen = verschieben${kids}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Ring drehen${kids}. ` : boneAct === 'scale' ? `${sel}: ziehen = größer/kleiner (vom Ring aus)${lw}${kids}. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
   $('status').textContent = draftNote + (mode === 'align' ? 'Ausrichten: ziehen = Ebene schieben; Pfeile fein. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : mode === 'organ' ? hintOrg : hintBone) + (out.length ? `Rot: ${out.length} Knochen-/Organpunkte ragen aus der Haut.` : '');
-  $('alignInfo').textContent = `Maßstab ${(align.s / align.s0 * 100).toFixed(1)}% · Drehung ${align.r.toFixed(2)}°${align.mx ? ' · Daumen gespiegelt' : ''}${align.my ? ' · umgedreht' : ''}`;
+  $('alignInfo').textContent = `Maßstab ${(align.s / align.s0 * 100).toFixed(1)}% · Drehung ${align.r.toFixed(2)}°${align.mx ? ' · Figur gespiegelt (Daumen)' : ''}${align.my ? ' · Figur umgedreht' : ''}`;
   $('arot').value = Math.max(-180, Math.min(180, align.r)); $('mAx').classList.toggle('sel', !!align.mx); $('mLn').classList.toggle('sel', !!align.my);
 }
 
@@ -560,6 +565,11 @@ cv.addEventListener('pointerdown', (e) => {
       info.verts.forEach((v, i) => { if (!vertOk(b, v)) return; const s = cmToScr(v.x, v.y), d = Math.hypot(s[0] - p[0], s[1] - p[1]); if (d < bd) { bd = d; bi = i; } });
       if (bi >= 0) { pushUndo(); const l = links[sel] || (links[sel] = { off: new Set(), on: new Set() }); const idx = NAMES.indexOf(sel); const was = info.attach.some(([vi, b2]) => vi === bi && b2 === idx); if (l.off.has(bi)) l.off.delete(bi); else if (l.on.has(bi)) l.on.delete(bi); else if (was) l.off.add(bi); else l.on.add(bi); changed(); return; }
     }
+    if (boneAct === 'span') {
+      if (!sel) { const h2 = pickBone(x, y); if (h2) { sel = h2; $('boneSel').value = h2; } draw(); return; }
+      const b = BN[sel], ends = b.core.map(([cx2, cy2]) => bp(b, cx2, cy2)), d0 = Math.hypot(ends[0][0] - x, ends[0][1] - y), d1 = Math.hypot(ends[1][0] - x, ends[1][1] - y);
+      pushUndo(); drag = { kind: 'span', p1: [x, y], p2: [x, y], snap: T[sel] ? T[sel].slice() : null, flip: d1 < d0 }; draw(); return;
+    }
     const hit = pickBone(x, y);
     if (hit) { sel = hit; $('boneSel').value = hit; pushUndo(); drag = { kind: boneAct === 'rot' ? 'rot' : boneAct === 'scale' ? 'scale' : boneAct === 'move' ? 'bone' : 'pan', last: p }; } else drag = { kind: 'pan', last: p };
     draw();
@@ -579,6 +589,19 @@ cv.addEventListener('pointermove', (e) => {
   if (drag.kind === 'pt') { const [x, y] = scrToCm(p[0], p[1]); const q = [x, y]; if ($('protect').checked) pushOut(q); work[part][drag.i] = q; saveDraft(); }
   else if (drag.kind === 'pan') { view.px += p[0] - drag.last[0]; view.py += p[1] - drag.last[1]; drag.last = p; }
   else if (drag.kind === 'align') { align.tx += (p[0] - drag.last[0]) / view.z; align.ty += (p[1] - drag.last[1]) / view.z; drag.last = p; alignTouch(); }
+  else if (drag.kind === 'span' && sel) {
+    drag.p2 = scrToCm(p[0], p[1]);
+    if (drag.snap) T[sel] = drag.snap.slice(); else delete T[sel];
+    const b = BN[sel], e = b.core.map(([cx2, cy2]) => bp(b, cx2, cy2)), A = drag.flip ? e[1] : e[0], B = drag.flip ? e[0] : e[1], P1 = drag.p1, P2 = drag.p2;
+    const lb = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, lp = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
+    if (lp > 0.3) {
+      const bt = T[sel], axis = (b.ang || 0) + (bt ? (bt[2] * Math.PI) / 180 : 0), kl = Math.max(0.3, Math.min(3, lp / lb));
+      scaleAniso(sel, kl, 1, A, axis, true);
+      let phi = Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) - Math.atan2(B[1] - A[1], B[0] - A[0]); if (phi > Math.PI) phi -= 2 * Math.PI; if (phi < -Math.PI) phi += 2 * Math.PI;
+      moveBody(sel, phi, 1, A, [P1[0] - A[0], P1[1] - A[1]]);
+    }
+    dirty = true; saveDraft();
+  }
   else if (drag.kind === 'bone' && sel) { const k = K(), d = scrToCm(p[0], p[1]), d0 = scrToCm(drag.last[0], drag.last[1]); void k; for (const n of group()) moveBody(n, 0, 1, [0, 0], [d[0] - d0[0], d[1] - d0[1]]); drag.last = p; dirty = true; saveDraft(); }
   else if (drag.kind === 'rot' && sel) { const q = pivotOf(sel), qs = cmToScr(q[0], q[1]); const a1 = Math.atan2(drag.last[1] - qs[1], drag.last[0] - qs[0]), a2 = Math.atan2(p[1] - qs[1], p[0] - qs[0]); let phi = a2 - a1; if (phi > Math.PI) phi -= 2 * Math.PI; if (phi < -Math.PI) phi += 2 * Math.PI; for (const n of group()) moveBody(n, phi, 1, q, [0, 0]); drag.last = p; dirty = true; saveDraft(); }
   else if (drag.kind === 'omove' && selOrg) { const d = scrToCm(p[0], p[1]), d0 = scrToCm(drag.last[0], drag.last[1]), t = orgT(selOrg); t[0] += d[0] - d0[0]; t[1] += d[1] - d0[1]; drag.last = p; dirty = true; saveDraft(); }
@@ -605,13 +628,13 @@ function setMode(m) {
   $('alignRows').style.display = m === 'align' ? '' : 'none'; $('formRows').style.display = m === 'form' ? '' : 'none'; $('boneRows').style.display = m === 'bone' ? '' : 'none'; $('organRows').style.display = m === 'organ' ? '' : 'none';
   $('alignSliders').style.display = m === 'align' ? '' : 'none'; resize();
 }
-function setAct(a) { boneAct = a; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bScale', 'scale'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); $('kScale').style.display = a === 'scale' ? '' : 'none'; draw(); }
+function setAct(a) { boneAct = a; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bScale', 'scale'], ['bSpan', 'span'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); $('kScale').style.display = a === 'scale' ? '' : 'none'; draw(); }
 function setOrgAct(a) { orgAct = a; for (const [id, aa] of [['oMove', 'move'], ['oRot', 'rot'], ['oScale', 'scale']]) $(id).classList.toggle('sel', a === aa); $('oScaleOpts').style.display = a === 'scale' ? '' : 'none'; draw(); }
 $('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone'); $('mOrgan').onclick = () => setMode('organ');
 $('oMove').onclick = () => setOrgAct('move'); $('oRot').onclick = () => setOrgAct('rot'); $('oScale').onclick = () => setOrgAct('scale');
 $('orgSel').onchange = () => { selOrg = $('orgSel').value || null; draw(); };
 $('resetOrgans').onclick = () => { pushUndo(); O = {}; selOrg = null; changed(); };
-$('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link');
+$('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link'); $('bSpan').onclick = () => setAct('span');
 $('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
 $('bFree').onclick = () => { if (!sel) return; pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
 $('boneSel').onchange = () => { sel = $('boneSel').value || null; draw(); };
@@ -626,8 +649,8 @@ $('zoom').addEventListener('input', () => { const nz = fitZ * +$('zoom').value, 
 $('asc').addEventListener('input', () => { const ns = align.s0 * +$('asc').value; zoomAlign(ns / align.s, cw / 2, ch / 2); draw(); });
 $('alpha').addEventListener('input', draw);
 $('arot').addEventListener('input', () => { rotAlign(+$('arot').value - align.r, cw / 2, ch / 2); draw(); });
-$('mAx').onclick = () => { align.mx = !align.mx; skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
-$('mLn').onclick = () => { align.my = !align.my; skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
+$('mAx').onclick = () => { align.mx = !align.mx; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
+$('mLn').onclick = () => { align.my = !align.my; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
 for (const id of ['showBones', 'showAll', 'protect', 'showThreads', 'withKids', 'showSkin', 'showOrgans', 'kLen', 'kWid', 'oLen', 'oWid']) $(id).addEventListener('change', draw);
 $('solo').addEventListener('change', () => { fitAlign(); draw(); });
 $('keepRef').addEventListener('change', () => { if ($('keepRef').checked) saveRef(); else if (info) kvDel('ref/' + info.kind); });
@@ -687,7 +710,7 @@ function sendPreview() {
   setTimeout(() => { if (pvBusy) { pvBusy = false; if (pvDirty) schedulePreview(); } }, 6000);
 }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormPreview) return; pvBusy = false; if (d.bitmap) { pvBitmap = d.bitmap; pvPaint(); } if (pvDirty) schedulePreview(); });
-$('pvP').onclick = () => { pvView.z = Math.min(6, pvView.z * 1.3); pvPaint(); }; $('pvM').onclick = () => { pvView.z = Math.max(0.4, pvView.z / 1.3); pvPaint(); };
+$('pvP').onclick = () => { pvView.z = Math.min(40, pvView.z * 1.4); pvPaint(); }; $('pvM').onclick = () => { pvView.z = Math.max(0.4, pvView.z / 1.4); pvPaint(); };
 $('pvR').onclick = () => { pvView = { z: 1, x: 0, y: 0 }; pvPaint(); };
 $('pvBig').onclick = () => { pvBig = !pvBig; $('pv').style.width = pvBig ? '320px' : '150px'; $('pv').style.height = pvBig ? '560px' : '262px'; pvResize(); };
 $('pvLive').onchange = () => { if ($('pvLive').checked) { pvDirty = true; sendPreview(); } else pvPaint(); };
@@ -695,7 +718,7 @@ let pvDrag = null;
 $('pv').addEventListener('pointerdown', (e) => { if (e.target.closest('#pvbar')) return; pvDrag = { x: e.clientX, y: e.clientY }; $('pv').setPointerCapture(e.pointerId); e.stopPropagation(); });
 $('pv').addEventListener('pointermove', (e) => { if (!pvDrag) return; const d = window.devicePixelRatio || 1, f = rot === 0 ? 1 : 1; let dx = e.clientX - pvDrag.x, dy = e.clientY - pvDrag.y; if (rot === 90) [dx, dy] = [dy, -dx]; else if (rot === -90) [dx, dy] = [-dy, dx]; pvView.x += dx * d * f; pvView.y += dy * d * f; pvDrag = { x: e.clientX, y: e.clientY }; pvPaint(); });
 $('pv').addEventListener('pointerup', () => { pvDrag = null; }); $('pv').addEventListener('pointercancel', () => { pvDrag = null; });
-$('pv').addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation(); pvView.z = Math.max(0.4, Math.min(6, pvView.z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); pvPaint(); }, { passive: false });
+$('pv').addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation(); pvView.z = Math.max(0.4, Math.min(40, pvView.z * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); pvPaint(); }, { passive: false });
 resize(); pvResize(); fitView();
 post({ zdForm: 'ready' });
 </script>
