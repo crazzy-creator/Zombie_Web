@@ -100,6 +100,7 @@
         <button id="bFit" title="Alle Körperteil-Umrisse an die jetzige Knochenlage anpassen (rückgängig machbar)">Umriss an Knochen anpassen</button>
         <button id="bPivot">Drehpunkt: Gelenk</button>
         <button id="bFree">Knochen zurück</button>
+        <button id="bFreePart" title="Alle Knochen (und Finger) des gewählten Körperteils zurück in die Grundlage">Teil-Knochen zurück</button>
       </div>
       <div class="row">
         <label><input id="showThreads" type="checkbox" checked> Fäden zeigen</label>
@@ -140,6 +141,13 @@ const DONEKEY = (k) => 'zd_form_done_' + k;
 const isDone = (p) => !!doneP[p];
 const curDone = () => isDone($('part').value);
 function flashLocked() { draftNote = '🔒 Dieses Teil ist „fertig“ und gesperrt – oben „Bearbeiten“ antippen, um es wieder freizugeben. '; draw(); }
+function fillBoneSel() {
+  const part = $('part').value, bs = $('boneSel'); bs.innerHTML = ''; bs.add(new Option('Knochen wählen …', ''));
+  for (const b of info.bones) if (b.group === part) bs.add(new Option(b.label || b.name, b.name));
+  if (sel && BN[sel] && BN[sel].group !== part) sel = null;
+  bs.value = sel || '';
+}
+function foreignBone(n) { if (!n || !BN[n] || BN[n].group === $('part').value) return false; draftNote = `⚠ „${BN[n].label || n}“ gehört zu einem anderen Körperteil – oben das passende Teil wählen. `; draw(); return true; }
 function refreshDone() {
   const o = $('part').options; for (let i = 0; i < o.length; i++) { const lab = (PARTS.find((q) => q[0] === o[i].value) || [0, o[i].value])[1]; o[i].textContent = (isDone(o[i].value) ? '🔒 ' : '') + lab; }
   const d = curDone(); $('btnDone').textContent = d ? '🔒 Bearbeiten' : '✔ Fertig'; $('btnDone').classList.toggle('sel', d);
@@ -248,7 +256,7 @@ async function setInfo(msg) {
   let note = '';
   if (!msg.fresh) { const d = loadDraft(info.kind); if (d) { applyDraft(d); note = 'Entwurf geladen. '; } }
   // Bone-Auswahl
-  const bs = $('boneSel'); bs.innerHTML = ''; bs.add(new Option('Knochen wählen …', '')); for (const b of info.bones) bs.add(new Option(b.label || b.name, b.name));
+  fillBoneSel();
   const os = $('orgSel'); os.innerHTML = ''; os.add(new Option('Innerei wählen …', '')); for (const d of info.organDefs || []) os.add(new Option(d.name, d.name));
   selOrg = null;
   try { doneP = JSON.parse(localStorage.getItem(DONEKEY(info.kind)) || '{}'); } catch (e) { doneP = {}; }
@@ -616,6 +624,7 @@ cv.addEventListener('pointerdown', (e) => {
     drag = bi >= 0 ? { kind: 'pt', i: bi } : { kind: 'pan', last: p };
   } else if (mode === 'bone' && $('allowBones').checked) {
     const [x, y] = scrToCm(p[0], p[1]);
+    if (boneAct === 'link' && foreignBone(sel)) { drag = { kind: 'pan', last: p }; return; }
     if (boneAct === 'link' && sel && isDone(BN[sel].group)) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
     if (boneAct === 'link' && sel) {
       const b = BN[sel]; let bi = -1, bd = 14;
@@ -623,13 +632,15 @@ cv.addEventListener('pointerdown', (e) => {
       if (bi >= 0) { pushUndo(); const l = links[sel] || (links[sel] = { off: new Set(), on: new Set() }); const idx = NAMES.indexOf(sel); const was = info.attach.some(([vi, b2]) => vi === bi && b2 === idx); if (l.off.has(bi)) l.off.delete(bi); else if (l.on.has(bi)) l.on.delete(bi); else if (was) l.off.add(bi); else l.on.add(bi); changed(); return; }
     }
     if (boneAct === 'span') {
-      if (e.ctrlKey || e.metaKey || e.shiftKey) { const h3 = pickBone(x, y); if (h3) { sel = h3; $('boneSel').value = h3; } draw(); return; }
+      if (e.ctrlKey || e.metaKey || e.shiftKey) { const h3 = pickBone(x, y); if (h3 && !foreignBone(h3)) { sel = h3; $('boneSel').value = h3; } draw(); return; }
+      if (foreignBone(sel)) { drag = { kind: 'pan', last: p }; return; }
       if (sel && isDone(BN[sel].group)) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
       if (!sel) { const h2 = pickBone(x, y); if (h2) { sel = h2; $('boneSel').value = h2; } draw(); return; }
       const b = BN[sel], ends = b.core.map(([cx2, cy2]) => bp(b, cx2, cy2)), d0 = Math.hypot(ends[0][0] - x, ends[0][1] - y), d1 = Math.hypot(ends[1][0] - x, ends[1][1] - y);
       pushUndo(); drag = { kind: 'span', p1: [x, y], p2: [x, y], snap: T[sel] ? T[sel].slice() : null, flip: d1 < d0 }; draw(); return;
     }
     const hit = pickBone(x, y);
+    if (hit && foreignBone(hit)) { drag = { kind: 'pan', last: p }; return; }
     if (hit && isDone(BN[hit].group)) { sel = hit; $('boneSel').value = hit; flashLocked(); drag = { kind: 'pan', last: p }; return; }
     if (hit) { sel = hit; $('boneSel').value = hit; pushUndo(); drag = { kind: boneAct === 'rot' ? 'rot' : boneAct === 'scale' ? 'scale' : boneAct === 'move' ? 'bone' : 'pan', last: p }; } else drag = { kind: 'pan', last: p };
     draw();
@@ -673,7 +684,7 @@ cv.addEventListener('pointermove', (e) => {
     drag.last = p; dirty = true; saveDraft(); }
   draw();
 });
-const up = (e) => { if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && e.type === 'pointerup' && mode === 'bone' && boneAct === 'span' && $('allowBones').checked) { const [x, y] = scrToCm(pinch.x0, pinch.y0), h4 = pickBone(x, y); if (h4) { sel = h4; $('boneSel').value = h4; } pinch.moved = true; }
+const up = (e) => { if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && e.type === 'pointerup' && mode === 'bone' && boneAct === 'span' && $('allowBones').checked) { const [x, y] = scrToCm(pinch.x0, pinch.y0), h4 = pickBone(x, y); if (h4 && !foreignBone(h4)) { sel = h4; $('boneSel').value = h4; } pinch.moved = true; }
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('dblclick', (e) => {
@@ -698,6 +709,7 @@ $('resetOrgans').onclick = () => { if (isDone('torso')) return flashLocked(); pu
 $('bFit').onclick = () => { pushUndo(); const n = fitOutlines(); draftNote = n ? `Umrisse angepasst (${n} Teile). ` : 'Nichts anzupassen – Knochen unverändert. '; changed(); };
 $('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link'); $('bSpan').onclick = () => setAct('span');
 $('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
+$('bFreePart').onclick = () => { const g = $('part').value; if (isDone(g)) return flashLocked(); pushUndo(); for (const b of info.bones) if (b.group === g) delete T[b.name]; changed(); };
 $('bFree').onclick = () => { if (!sel) return; if (isDone(BN[sel].group)) return flashLocked(); pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
 $('boneSel').onchange = () => { sel = $('boneSel').value || null; draw(); };
 // Feinjustierung der Figur-Ebene
@@ -722,7 +734,7 @@ $('info').textContent = 'Aufbau: 1 Ausrichten = Referenzbild laden und die Figur
 $('rot').addEventListener('change', () => { rot = +$('rot').value; try { localStorage.setItem('zd_form_rot', String(rot)); } catch (e) {} resize(); fitView(); draw(); });
 try { const r0 = localStorage.getItem('zd_form_rot'); if (r0 === '90' || r0 === '-90') { rot = +r0; $('rot').value = r0; } } catch (e) {}
 $('allowBones').addEventListener('change', () => { if ($('allowBones').checked) setMode('bone'); draw(); });
-$('part').addEventListener('change', () => { dirty = true; fitAlign(); refreshDone(); draw(); });
+$('part').addEventListener('change', () => { dirty = true; fillBoneSel(); fitAlign(); refreshDone(); draw(); });
 $('btnDone').onclick = () => { const p = $('part').value; if (doneP[p]) delete doneP[p]; else doneP[p] = 1; try { localStorage.setItem(DONEKEY(info.kind), JSON.stringify(doneP)); } catch (e) {} refreshDone(); draftNote = doneP[p] ? '🔒 Teil als fertig markiert. ' : 'Teil wieder freigegeben. '; draw(); };
 $('kind').addEventListener('change', () => post({ zdForm: 'need', kind: $('kind').value }));
 $('file').onchange = (e) => {
