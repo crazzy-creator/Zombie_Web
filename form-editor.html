@@ -22,6 +22,7 @@
   #drawer{display:none;flex-direction:column;gap:8px;padding:8px;background:#1c1616;border-bottom:1px solid #3a2e2e}
   #drawer.open{display:flex}
   #status{min-height:16px;line-height:16px}
+  details summary{cursor:pointer;color:#a89898;font-size:12px;padding:3px 0}
   #chk{position:absolute;left:8px;right:8px;bottom:8px;max-height:60%;overflow:auto;background:rgba(18,14,14,.96);border:1px solid #5a4646;border-radius:10px;padding:10px;display:none;z-index:6;font-size:12px}
   #chk.open{display:block}
   #chk li{margin:3px 0}
@@ -80,32 +81,34 @@
     </div>
     <div id="formRows" class="row" style="display:none">
       <label><input id="protect" type="checkbox" checked> Schutzabstand zu Knochen</label>
-      <label><input id="showAll" type="checkbox" checked> alle Teile zeigen</label>
       <label><input id="showBones" type="checkbox" checked> Knochen zeigen</label>
       <button id="resetPart">Teil zurücksetzen</button>
     </div>
     <div id="boneRows" style="display:none">
       <div class="row">
-        <select id="boneSel"></select>
         <button id="bMove" class="sel">Verschieben</button>
+        <button id="bSpan" title="Startpunkt antippen, zum Endpunkt ziehen: der Knochen wird genau dazwischen gelegt">Start→Ende</button>
         <button id="bRot">Drehen</button>
         <button id="bScale">Skalieren</button>
-        <button id="bSpan" title="Knochen auf der Textur von Gelenk zu Gelenk legen">Start→Ende</button>
-        <button id="bLink">Fäden</button>
         <span id="kScale" style="display:none"><label><input id="kLen" type="checkbox" checked> Länge</label> <label><input id="kWid" type="checkbox" checked> Breite</label></span>
-      </div>
-      <div class="row">
-        <label><input id="allowBones" type="checkbox" checked> Knochen verschiebbar</label>
-        <label><input id="withKids" type="checkbox"> mit Anhang</label>
+        <button id="bAsst" title="Gelenke der Vorlage nacheinander antippen (z. B. Schulter, Ellbogen, Handgelenk, Fingerspitze): die Knochen werden genau dorthin gelegt">Gelenke antippen</button>
         <button id="bFit" title="Alle Körperteil-Umrisse an die jetzige Knochenlage anpassen (rückgängig machbar)">Umriss an Knochen anpassen</button>
-        <button id="bPivot">Drehpunkt: Gelenk</button>
-        <button id="bFree">Knochen zurück</button>
-        <button id="bFreePart" title="Alle Knochen (und Finger) des gewählten Körperteils zurück in die Grundlage">Teil-Knochen zurück</button>
       </div>
-      <div class="row">
-        <label><input id="showThreads" type="checkbox" checked> Fäden zeigen</label>
-        <button id="resetBones">Alle Knochen zurücksetzen</button><button id="resetLinks">Fäden zurücksetzen</button>
-      </div>
+      <details id="boneMore"><summary>Mehr …</summary>
+        <div class="row">
+          <select id="boneSel"></select>
+          <button id="bLink">Fäden bearbeiten</button>
+          <label><input id="showThreads" type="checkbox" checked> Fäden zeigen</label>
+          <label><input id="allowBones" type="checkbox" checked> Knochen verschiebbar</label>
+          <label><input id="withKids" type="checkbox"> mit Anhang</label>
+        </div>
+        <div class="row">
+          <button id="bFree">Knochen zurück</button>
+          <button id="bFreePart" title="Alle Knochen (und Finger) des gewählten Körperteils zurück in die Grundlage">Teil-Knochen zurück</button>
+          <button id="resetBones">Alle Knochen zurücksetzen</button>
+          <button id="resetLinks">Fäden zurücksetzen</button>
+        </div>
+      </details>
     </div>
     <div id="organRows" style="display:none">
       <div class="row">
@@ -186,9 +189,11 @@ window.addEventListener('resize', resize);
 // ---------- Koordinaten: cm -(Figur-Ebene: Maßstab, Drehung, Verschiebung)-> Bild -(Ansicht)-> Schirm ----------
 const kap = () => S0 * align.s;
 const rr = () => (align.r * Math.PI) / 180;
-function ensureMc(a, part) { if ((a.mx || a.my) && !a.mc && work && work[part]) { const bb = bboxOf(work[part]); a.mc = { cc: [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], al: partAxis(work[part]) }; } }
-function reflOf(a, sg) { const c2 = Math.cos(a.mc.al), s2 = Math.sin(a.mc.al), cc = a.mc.cc, R = [sg * (2 * c2 * c2 - 1), sg * 2 * c2 * s2, sg * 2 * c2 * s2, sg * (2 * s2 * s2 - 1)]; return [R[0], R[2], R[1], R[3], cc[0] - R[0] * cc[0] - R[1] * cc[1], cc[1] - R[2] * cc[0] - R[3] * cc[1]]; }
-function Rtot(a) { if (!a.mx && !a.my) return null; if ($('part').value === 'torso') return null; if (!a.mc) ensureMc(a, $('part').value); if (!a.mc) return null; let m = a.my ? reflOf(a, -1) : null; if (a.mx) m = m ? mmul(reflOf(a, 1), m) : reflOf(a, 1); return m; }
+// Spiegelachse je Körperteil aus der GRUNDFORM (stabil, unabhängig von späteren Änderungen und vom gerade gewählten Teil)
+const mcCache = {};
+function mcOf(part) { const b = info.base[part]; const k = info.kind + '/' + part; if (!mcCache[k]) { const bb = bboxOf(b); mcCache[k] = { cc: [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2], al: partAxis(b) }; } return mcCache[k]; }
+function reflOf(part, sg) { const mc = mcOf(part), c2 = Math.cos(mc.al), s2 = Math.sin(mc.al), cc = mc.cc, R = [sg * (2 * c2 * c2 - 1), sg * 2 * c2 * s2, sg * 2 * c2 * s2, sg * (2 * s2 * s2 - 1)]; return [R[0], R[2], R[1], R[3], cc[0] - R[0] * cc[0] - R[1] * cc[1], cc[1] - R[2] * cc[0] - R[3] * cc[1]]; }
+function Rtot(a, part) { part = part || $('part').value; if (!a.mx && !a.my) return null; if (part === 'torso') return null; let m = a.my ? reflOf(part, -1) : null; if (a.mx) m = m ? mmul(reflOf(part, 1), m) : reflOf(part, 1); return m; }
 const applyM = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 function cmToImg(x, y) { const R = Rtot(align); if (R) [x, y] = applyM(R, x, y); const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a); return [align.tx + k * (x * co - y * si), align.ty + k * (x * si + y * co)]; }
 function imgToCm(ix, iy) { const k = kap(), a = rr(), co = Math.cos(a), si = Math.sin(a), dx = (ix - align.tx) / k, dy = (iy - align.ty) / k, r = [dx * co + dy * si, -dx * si + dy * co], R = Rtot(align); return R ? applyM(R, r[0], r[1]) : r; }
@@ -241,7 +246,11 @@ function pickOrgan(x, y) { let best = null; for (const d of info.organDefs || []
 // ---------- Daten laden ----------
 const tFrom = (a) => { const kl = a[3] || 1; return [a[0] || 0, a[1] || 0, a[2] || 0, kl, a.length >= 5 ? (a[4] || 1) : kl]; };
 function nearestVert(x, y, g) { let bi = -1, bd = TOL; info.verts.forEach((v, i) => { if (g && v.g !== g) return; const d = Math.hypot(v.x - x, v.y - y); if (d < bd) { bd = d; bi = i; } }); return bi; }
-function linksFrom(src) { const out = {}; for (const k in src || {}) { const l = (out[k] = { off: new Set(), on: new Set() }); for (const [x, y] of src[k].off || []) { const i = nearestVert(x, y); if (i >= 0) l.off.add(i); } for (const [x, y] of src[k].on || []) { const i = nearestVert(x, y); if (i >= 0) l.on.add(i); } } return out; }
+function linksFrom(src) { const out = {}; for (const k in src || {}) { const g = BN[k] && !/^schulter/.test(k) ? BN[k].group : undefined, l = (out[k] = { off: new Set(), on: new Set() }); for (const [x, y] of src[k].off || []) { const i = nearestVert(x, y, g); if (i >= 0) l.off.add(i); } for (const [x, y] of src[k].on || []) { const i = nearestVert(x, y, g); if (i >= 0) l.on.add(i); } } return out; }
+// Hautnetz und automatische Haftung live aus dem Spiel holen (damit die Fäden zur aktuellen Form und Knochenlage passen)
+let meshTimer = 0, meshId = 0;
+function scheduleMesh() { if (!info || !EMB) return; clearTimeout(meshTimer); meshTimer = setTimeout(() => { meshId++; post({ zdForm: 'mesh', id: meshId, kind: info.kind, data: currentData() }); }, 700); }
+window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormMesh || !info || d.kind !== info.kind || d.id !== meshId || !d.mesh) return; const L = currentData().links; info.verts = d.mesh.verts; info.attach = d.mesh.attach; links = linksFrom(L); draw(); });
 async function setInfo(msg) {
   if (msg.native && rot !== 0) { rot = 0; $('rot').value = '0'; resize(); }
   if (msg.native) $('rotLbl').style.display = 'none';
@@ -296,7 +305,7 @@ function currentData() {
 function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length && !Object.keys(d.fingers || {}).length; }
 let draftTimer = 0;
 function fingerData() { const o = {}; for (const k in T) if (BN[k] && BN[k].editorOnly && hasT(T[k])) o[k] = T[k].map((v) => Math.round(v * 1000) / 1000); return o; }
-function saveDraft() { schedulePreview(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fit = TF; if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
+function saveDraft() { schedulePreview(); scheduleMesh(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fit = TF; if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
 function loadDraft(kind) { try { return (JSON.parse(localStorage.getItem(DRAFT) || '{}')[kind] || {}).data || null; } catch (e) { return null; } }
 function clearDraft(kind) { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); delete all[kind]; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }
 function applyDraft(d) {
@@ -426,6 +435,93 @@ function boneDist(b, p) { let best = Infinity; for (const t of b.tris) { if (t[9
 function spikes(poly) { const n = poly.length, out = []; for (let i = 0; i < n; i++) { const a = poly[(i + n - 1) % n], v = poly[i], b = poly[(i + 1) % n], ux = a[0] - v[0], uy = a[1] - v[1], wx = b[0] - v[0], wy = b[1] - v[1], lu = Math.hypot(ux, uy), lw = Math.hypot(wx, wy); if (lu < 1e-6 || lw < 1e-6) { out.push(i); continue; } const cosA = (ux * wx + uy * wy) / (lu * lw); if (cosA > 0.94) out.push(i); } return out; }
 function polySelfCross(poly) { const n = poly.length; const cr = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]); for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) { if (i === 0 && j === n - 1) continue; const a = poly[i], b = poly[(i + 1) % n], c = poly[j], d = poly[(j + 1) % n]; if (cr(a, b, c) * cr(a, b, d) < 0 && cr(c, d, a) * cr(c, d, b) < 0) return true; } return false; }
 const LIMB = /^(oberarm|unterarm|oberschenkel|schienbein|schaedel|becken)/;
+// ---------- Figuren-Check: Gliedmaßen-Proportionen und Passung Umriss ↔ Knochen ----------
+const CHAINS = { 'Bein vorn': ['oberschenkelN', 'schienbeinN', 'fussN'], 'Bein hinten': ['oberschenkelF', 'schienbeinF', 'fussF'], 'Arm vorn': ['oberarmN', 'unterarmN', 'handN'], 'Arm hinten': ['oberarmF', 'unterarmF', 'handF'] };
+const PAIRS = [['Bein vorn', 'Bein hinten'], ['Arm vorn', 'Arm hinten']];
+const chainOk = (c) => c.every((n) => BN[n]);
+function boneEnds(n) { const b = BN[n]; return b.core.map((q) => bp(b, q[0], q[1])); }
+function boneLen(n) { const e = boneEnds(n); return Math.hypot(e[1][0] - e[0][0], e[1][1] - e[0][1]); }
+const chainLen = (c) => boneLen(c[0]) + boneLen(c[1]);
+function nearestEnd(n, pt) { const e = boneEnds(n); return Math.hypot(e[0][0] - pt[0], e[0][1] - pt[1]) <= Math.hypot(e[1][0] - pt[0], e[1][1] - pt[1]) ? [e[0], e[1]] : [e[1], e[0]]; }
+/** Ober- und Unterteil der Kette um Faktor k verlängern/kürzen (Länge entlang des Knochens), das Ende (Fuß/Hand samt Fingern) wandert mit */
+function scaleChain(c, k) {
+  let shift = [0, 0], prevD = null;
+  for (let i = 0; i < c.length; i++) {
+    const n = c[i], last = i === c.length - 1;
+    for (const m of last ? subtree(n) : [n]) moveBody(m, 0, 1, [0, 0], shift);
+    if (last) break;
+    const b = BN[n], ref = i === 0 ? pivotOf(n) : prevD, [prox, dist] = nearestEnd(n, ref);
+    const t = T[n], axis = (b.ang || 0) + (t ? (t[2] * Math.PI) / 180 : 0);
+    scaleAniso(n, k, 1, prox, axis, true);
+    const e2 = boneEnds(n), nd = Math.hypot(e2[0][0] - prox[0], e2[0][1] - prox[1]) > Math.hypot(e2[1][0] - prox[0], e2[1][1] - prox[1]) ? e2[0] : e2[1];
+    shift = [shift[0] + nd[0] - dist[0], shift[1] + nd[1] - dist[1]]; prevD = nd;
+  }
+}
+// ---------- Assistent: Gelenke der Vorlage antippen → Knochen setzen ----------
+const ASST = {
+  armN: { chain: ['oberarmN', 'unterarmN', 'handN'], labels: ['Schulter', 'Ellbogen', 'Handgelenk', 'Fingerspitze (Mittelfinger)'] },
+  armF: { chain: ['oberarmF', 'unterarmF', 'handF'], labels: ['Schulter', 'Ellbogen', 'Handgelenk', 'Fingerspitze (Mittelfinger)'] },
+  beinN: { chain: ['oberschenkelN', 'schienbeinN', 'fussN'], labels: ['Hüfte', 'Knie', 'Knöchel', 'Zehenspitze'] },
+  beinF: { chain: ['oberschenkelF', 'schienbeinF', 'fussF'], labels: ['Hüfte', 'Knie', 'Knöchel', 'Zehenspitze'] },
+};
+let asst = null;
+function asstText() { if (!asst) return ''; const d = ASST[asst.part]; return `Assistent ${asst.pts.length + 1}/${d.labels.length}: ${d.labels[asst.pts.length]} auf der Vorlage antippen (Zwei Finger = Zoom, nochmal „Gelenke antippen“ = abbrechen). `; }
+function asstStop() { asst = null; $('bAsst').classList.remove('sel'); }
+function asstStart() {
+  if (asst) { asstStop(); draftNote = 'Assistent abgebrochen. '; draw(); return; }
+  const part = $('part').value;
+  if (!ASST[part]) { draftNote = 'Der Assistent gilt für Arme und Beine (Teil oben wählen). '; draw(); return; }
+  if (isDone(part)) return flashLocked();
+  if (!$('allowBones').checked) { draftNote = 'Knochen sind gesperrt: unter „Mehr …“ „Knochen verschiebbar“ einschalten. '; draw(); return; }
+  if (!ASST[part].chain.every((n) => BN[n])) return;
+  asst = { part, pts: [] }; $('bAsst').classList.add('sel'); pushUndo(); draftNote = asstText(); draw();
+}
+function spanApply(n, P1, P2, group) {
+  const b = BN[n], j = parentJoint(n), prox = j ? (Math.hypot(b.core[0][0] - j.x, b.core[0][1] - j.y) <= Math.hypot(b.core[1][0] - j.x, b.core[1][1] - j.y) ? 0 : 1) : 0;
+  const e = boneEnds(n), A = e[prox], B = e[1 - prox];
+  const lb = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1, lp = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]); if (lp < 0.3) return;
+  const bt = T[n], axis = (b.ang || 0) + (bt ? (bt[2] * Math.PI) / 180 : 0), kl = Math.max(0.3, Math.min(3, lp / lb));
+  for (const m of group) scaleAniso(m, kl, 1, A, axis, m === n);
+  let phi = Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) - Math.atan2(B[1] - A[1], B[0] - A[0]); if (phi > Math.PI) phi -= 2 * Math.PI; if (phi < -Math.PI) phi += 2 * Math.PI;
+  for (const m of group) moveBody(m, phi, 1, A, [P1[0] - A[0], P1[1] - A[1]]);
+}
+function asstPoint(x, y) {
+  if (!asst) return; asst.pts.push([x, y]); const d = ASST[asst.part];
+  if (asst.pts.length < d.labels.length) { draftNote = asstText(); draw(); return; }
+  const P = asst.pts, c = d.chain, part = asst.part;
+  spanApply(c[0], P[0], P[1], [c[0]]); spanApply(c[1], P[1], P[2], [c[1]]); spanApply(c[2], P[2], P[3], [...subtree(c[2])]);
+  asstStop(); fitOutlines(); changed(); draftNote = `Knochen von ${(PARTS.find((q) => q[0] === part) || [0, part])[1]} gesetzt und Umriss angepasst – Breite bei Bedarf mit „Skalieren“ (nur Breite), Rückgängig geht. `; draw();
+}
+function fitPartFromBase(part) { work[part] = info.base[part].map((q) => q.slice()); TF[part] = {}; }
+function limbProblems(issues) {
+  for (const [a, b] of PAIRS) {
+    const ca = CHAINS[a], cb = CHAINS[b]; if (!chainOk(ca) || !chainOk(cb)) continue;
+    const la = chainLen(ca), lb = chainLen(cb), d = Math.abs(la - lb);
+    if (d / Math.max(la, lb) < 0.03) continue;
+    const [longN, shortN, lc, sc, ll, ls] = la > lb ? [a, b, ca, cb, la, lb] : [b, a, cb, ca, lb, la];
+    const apply = (fn) => () => { fn(); fitOutlines(); };
+    issues.push({ lvl: 'warn', fix: null, part: null, text: `${longN} ist ${d.toFixed(1)} cm (${((d / ls) * 100).toFixed(0)} %) länger als ${shortN} (Ober- + Unterteil: ${ll.toFixed(1)} gegen ${ls.toFixed(1)} cm)`, acts: [
+      { label: `${longN} kürzen`, run: apply(() => scaleChain(lc, ls / ll)) },
+      { label: `${shortN} verlängern`, run: apply(() => scaleChain(sc, ll / ls)) },
+      { label: 'Mittelwert', run: apply(() => { const m = (ll + ls) / 2; scaleChain(lc, m / ll); scaleChain(sc, m / ls); }) },
+    ] });
+  }
+  for (const [p, label] of PARTS) {
+    if (p === 'torso') continue;
+    const bs = info.bones.filter((b) => b.group === p && !b.editorOnly && b.core); if (!bs.length) continue;
+    let tot = 0, ins = 0; for (const b of bs) for (const e of boneEnds(b.name)) { tot++; if (inPoly(e[0], e[1], work[p])) ins++; }
+    if (tot && ins / tot < 0.7) issues.push({ lvl: 'bad', fix: null, part: p, text: `${label}: Umriss und Knochen passen nicht zusammen (nur ${ins} von ${tot} Knochenenden liegen in der Haut)`, acts: [
+      { label: 'Umriss an Knochen anpassen', run: () => fitOutlines() },
+      { label: 'Umriss auf Grundform setzen + anpassen', run: () => { fitPartFromBase(p); fitOutlines(); } },
+    ] });
+  }
+  for (const j of info.joints) {
+    const A = BN[j.a], B = BN[j.b], ch2 = depthOf(j.a) > depthOf(j.b) ? A : B;
+    if (ch2.group === 'torso' || !/ellbogen|kni|handgelenk|knoechel|hueft|schulter/.test(j.name)) continue;
+    const pt = bp(ch2, j.x, j.y); if (!work[ch2.group]) continue;
+    if (!inPoly(pt[0], pt[1], work[ch2.group])) issues.push({ lvl: 'warn', fix: null, part: ch2.group, text: `Gelenk ${j.name} liegt außerhalb der Haut von ${(PARTS.find((q) => q[0] === ch2.group) || [0, ch2.group])[1]} (Umriss dort erweitern oder Knochen versetzen)` });
+  }
+}
 function runCheck() {
   const issues = [];
   const savePart = $('part').value;
@@ -447,6 +543,7 @@ function runCheck() {
     const da = boneDist(A, pt), db = boneDist(B, pt);
     if (Math.max(da, db) > 1.5) issues.push({ lvl: 'warn', fix: null, part: null, text: `Gelenk ${j.name}: ${Math.max(da, db).toFixed(1)} cm Abstand zum Knochen ${da > db ? j.a : j.b} (Kontakt fehlt)` });
   }
+  limbProblems(issues);
   const lone = []; for (const b of info.bones) if (LIMB.test(b.name) && effLinks(b.name).size === 0) lone.push(b.name);
   if (lone.length) issues.push({ lvl: 'warn', fix: 'threads', part: null, text: `Knochen ohne Haut-Fäden: ${lone.join(', ')}` });
   const linked = new Set(); for (const b of info.bones) for (const v of effLinks(b.name)) linked.add(v);
@@ -456,11 +553,13 @@ function runCheck() {
 }
 function showCheck() {
   const issues = runCheck(), box = $('chk');
+  issues.sort((x, y) => (y.acts ? 2 : 0) + (y.lvl === 'bad' ? 1 : 0) - ((x.acts ? 2 : 0) + (x.lvl === 'bad' ? 1 : 0)));
   let h = '<b>Prüfung</b> <button id="chkFix" class="main">Automatisch korrigieren</button> <button id="chkUndo">↶ Rückgängig</button> <button id="chkClose">Schließen</button><ul>';
   if (!issues.length) h += '<li class="ok">Keine Mängel gefunden.</li>';
-  for (const i of issues) h += `<li class="${i.lvl}">${i.text}${i.fix ? '' : ' (nur Hinweis, keine Automatik)'}</li>`;
+  issues.forEach((i, n) => { h += `<li class="${i.lvl}">${i.text}${i.fix || i.acts ? '' : ' (nur Hinweis, keine Automatik)'}${(i.acts || []).map((a, k) => ` <button data-act="${n}:${k}">${a.label}</button>`).join('')}</li>`; });
   h += '</ul>';
   box.innerHTML = h; box.classList.add('open');
+  box.querySelectorAll('button[data-act]').forEach((bt) => { bt.onclick = () => { const [n, k] = bt.dataset.act.split(':').map(Number); pushUndo(); issues[n].acts[k].run(); changed(); showCheck(); }; });
   $('chkClose').onclick = () => box.classList.remove('open');
   $('chkUndo').onclick = () => { undo(); showCheck(); };
   $('chkFix').onclick = () => { pushUndo(); autoFix(issues); showCheck(); };
@@ -502,9 +601,8 @@ function skinCanvas(part, a) {
   g.fillStyle = '#777'; g.fillRect(0, 0, TW, TH);
   const k = S0 * a.s, r = (a.r * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r), fx = TW / bw, fy = TH / bh;
   let m = [co / k, -si / k, si / k, co / k, (-a.tx * co - a.ty * si) / k, (a.tx * si - a.ty * co) / k];    // Bild -> cm
-  ensureMc(a, part);
-  if (a.mx && part !== 'torso') m = mmul(reflOf(a, 1), m);       // quer zur Längsachse spiegeln
-  if (a.my && part !== 'torso') m = mmul(reflOf(a, -1), m);      // entlang der Längsachse spiegeln
+  if (a.mx && part !== 'torso') m = mmul(reflOf(part, 1), m);       // quer zur Längsachse spiegeln
+  if (a.my && part !== 'torso') m = mmul(reflOf(part, -1), m);      // entlang der Längsachse spiegeln
   const q = [fx, 0, 0, fy, -ox * fx, -oy * fy];
   const t = mmul(q, m);
   g.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]);
@@ -569,7 +667,7 @@ function paint() {
       if (mode === 'organ') { const [cx, cy] = orgNow(d), [sx, sy] = cmToScr(cx, cy); c.fillStyle = '#fff'; c.font = '11px system-ui'; c.textAlign = 'center'; c.fillText(d.name, sx, sy); if (hl) { c.beginPath(); c.arc(sx, sy, 9, 0, 6.3); c.strokeStyle = '#ffd84a'; c.lineWidth = 2.5; c.stroke(); } }
     }
   }
-  for (const [p] of PARTS) { if (p === part || !$('showAll').checked || solo) continue; path(work[p]); c.strokeStyle = 'rgba(160,200,160,.55)'; c.lineWidth = 1.2; c.stroke(); }
+  for (const [p] of PARTS) { if (p === part || solo) continue; path(work[p]); c.strokeStyle = 'rgba(160,200,160,.55)'; c.lineWidth = 1.2; c.stroke(); }
   c.setLineDash([5, 4]); path(info.base[part]); c.strokeStyle = 'rgba(200,200,200,.5)'; c.lineWidth = 1.2; c.stroke(); c.setLineDash([]);
   path(work[part]); c.fillStyle = 'rgba(255,60,60,.12)'; c.fill(); c.strokeStyle = '#ff5050'; c.lineWidth = 2; c.stroke();
   if (mode === 'form') for (const [x, y] of work[part]) { const [sx, sy] = cmToScr(x, y); c.beginPath(); c.arc(sx, sy, 5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); c.strokeStyle = '#a00'; c.lineWidth = 1; c.stroke(); }
@@ -580,6 +678,7 @@ function paint() {
     if (sel) { const q = pivotOf(sel), [sx, sy] = cmToScr(q[0], q[1]); c.beginPath(); c.arc(sx, sy, 9, 0, 6.3); c.strokeStyle = '#ffd84a'; c.lineWidth = 2.5; c.stroke(); c.beginPath(); c.arc(sx, sy, 2.5, 0, 6.3); c.fillStyle = '#fff'; c.fill(); }
   }
   if (drag && drag.kind === 'span') { const [x1, y1] = cmToScr(drag.p1[0], drag.p1[1]), [x2, y2] = cmToScr(drag.p2[0], drag.p2[1]); c.strokeStyle = '#4af'; c.lineWidth = 2; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); c.fillStyle = '#4f4'; c.beginPath(); c.arc(x1, y1, 6, 0, 6.3); c.fill(); c.fillStyle = '#f44'; c.beginPath(); c.arc(x2, y2, 6, 0, 6.3); c.fill(); }
+  if (asst) { c.font = '12px system-ui'; c.textAlign = 'left'; asst.pts.forEach((q, i) => { const [sx, sy] = cmToScr(q[0], q[1]); c.beginPath(); c.arc(sx, sy, 7, 0, 6.3); c.fillStyle = '#4af'; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); c.fillStyle = '#fff'; c.fillText(ASST[asst.part].labels[i].split(' ')[0], sx + 10, sy + 4); if (i) { const [px2, py2] = cmToScr(asst.pts[i - 1][0], asst.pts[i - 1][1]); c.strokeStyle = '#4af'; c.lineWidth = 2; c.beginPath(); c.moveTo(px2, py2); c.lineTo(sx, sy); c.stroke(); } }); }
   const nl = sel ? effLinks(sel).size : 0, kids = $('withKids').checked ? ' (mit Anhang)' : ' (nur dieser Knochen)';
   const hintOrg = !selOrg ? 'Innerei antippen oder oben wählen. ' : orgAct === 'move' ? `${selOrg}: ziehen = verschieben. ` : orgAct === 'rot' ? `${selOrg}: ziehen = um die Mitte drehen. ` : `${selOrg}: ziehen = größer/kleiner (${$('oLen').checked && $('oWid').checked ? 'gleichmäßig' : $('oLen').checked ? 'nur Länge' : $('oWid').checked ? 'nur Breite' : 'nichts gewählt'}). `;
   const lw = $('kLen').checked && $('kWid').checked ? '' : $('kLen').checked ? ' (nur Länge)' : $('kWid').checked ? ' (nur Breite)' : ' (nichts gewählt)';
@@ -624,6 +723,7 @@ cv.addEventListener('pointerdown', (e) => {
     drag = bi >= 0 ? { kind: 'pt', i: bi } : { kind: 'pan', last: p };
   } else if (mode === 'bone' && $('allowBones').checked) {
     const [x, y] = scrToCm(p[0], p[1]);
+    if (asst) { drag = { kind: 'asstTap', start: p, last: p, moved: false }; return; }
     if (boneAct === 'link' && foreignBone(sel)) { drag = { kind: 'pan', last: p }; return; }
     if (boneAct === 'link' && sel && isDone(BN[sel].group)) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
     if (boneAct === 'link' && sel) {
@@ -660,6 +760,7 @@ cv.addEventListener('pointermove', (e) => {
   if (drag.kind === 'pt') { const [x, y] = scrToCm(p[0], p[1]); const q = [x, y]; if ($('protect').checked) pushOut(q); work[part][drag.i] = q; saveDraft(); }
   else if (drag.kind === 'pan') { view.px += p[0] - drag.last[0]; view.py += p[1] - drag.last[1]; drag.last = p; }
   else if (drag.kind === 'align') { if (curDone()) return; align.tx += (p[0] - drag.last[0]) / view.z; align.ty += (p[1] - drag.last[1]) / view.z; drag.last = p; alignTouch(); }
+  else if (drag.kind === 'asstTap') { if (Math.hypot(p[0] - drag.start[0], p[1] - drag.start[1]) > 7) drag.moved = true; if (drag.moved) { view.px += p[0] - drag.last[0]; view.py += p[1] - drag.last[1]; drag.last = p; } }
   else if (drag.kind === 'span' && sel) {
     drag.p2 = scrToCm(p[0], p[1]);
     if (drag.snap) T[sel] = drag.snap.slice(); else delete T[sel];
@@ -684,7 +785,8 @@ cv.addEventListener('pointermove', (e) => {
     drag.last = p; dirty = true; saveDraft(); }
   draw();
 });
-const up = (e) => { if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && e.type === 'pointerup' && mode === 'bone' && boneAct === 'span' && $('allowBones').checked) { const [x, y] = scrToCm(pinch.x0, pinch.y0), h4 = pickBone(x, y); if (h4 && !foreignBone(h4)) { sel = h4; $('boneSel').value = h4; } pinch.moved = true; }
+const up = (e) => { if (drag && drag.kind === 'asstTap' && !drag.moved && ptrs.size <= 1 && e.type === 'pointerup') { const [x, y] = scrToCm(drag.start[0], drag.start[1]); drag = null; asstPoint(x, y); }
+  if (pinch && !pinch.moved && Date.now() - pinch.t0 < 400 && e.type === 'pointerup' && mode === 'bone' && boneAct === 'span' && $('allowBones').checked) { const [x, y] = scrToCm(pinch.x0, pinch.y0), h4 = pickBone(x, y); if (h4 && !foreignBone(h4)) { sel = h4; $('boneSel').value = h4; } pinch.moved = true; }
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) drag = null; draw(); };
 cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('dblclick', (e) => {
@@ -695,7 +797,7 @@ cv.addEventListener('dblclick', (e) => {
 cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); (mode === 'align' ? zoomAlign : zoomView)(e.deltaY < 0 ? 1.1 : 1 / 1.1, p[0], p[1]); draw(); }, { passive: false });
 
 function setMode(m) {
-  mode = m; if (m === 'organ' && $('part').value !== 'torso') { $('part').value = 'torso'; dirty = true; fitAlign(); }
+  asstStop(); mode = m; if (m === 'organ' && $('part').value !== 'torso') { $('part').value = 'torso'; dirty = true; fitAlign(); }
   for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone'], ['mOrgan', 'organ']]) $(id).classList.toggle('sel', m === mm);
   $('alignRows').style.display = m === 'align' ? '' : 'none'; $('formRows').style.display = m === 'form' ? '' : 'none'; $('boneRows').style.display = m === 'bone' ? '' : 'none'; $('organRows').style.display = m === 'organ' ? '' : 'none';
   $('alignSliders').style.display = m === 'align' ? '' : 'none'; resize();
@@ -706,9 +808,9 @@ $('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode
 $('oMove').onclick = () => setOrgAct('move'); $('oRot').onclick = () => setOrgAct('rot'); $('oScale').onclick = () => setOrgAct('scale');
 $('orgSel').onchange = () => { selOrg = $('orgSel').value || null; draw(); };
 $('resetOrgans').onclick = () => { if (isDone('torso')) return flashLocked(); pushUndo(); O = {}; selOrg = null; changed(); };
+$('bAsst').onclick = asstStart;
 $('bFit').onclick = () => { pushUndo(); const n = fitOutlines(); draftNote = n ? `Umrisse angepasst (${n} Teile). ` : 'Nichts anzupassen – Knochen unverändert. '; changed(); };
 $('bMove').onclick = () => setAct('move'); $('bRot').onclick = () => setAct('rot'); $('bScale').onclick = () => setAct('scale'); $('bLink').onclick = () => setAct('link'); $('bSpan').onclick = () => setAct('span');
-$('bPivot').onclick = () => { pivotMode = pivotMode === 'joint' ? 'center' : 'joint'; $('bPivot').textContent = 'Drehpunkt: ' + (pivotMode === 'joint' ? 'Gelenk' : 'Mitte'); draw(); };
 $('bFreePart').onclick = () => { const g = $('part').value; if (isDone(g)) return flashLocked(); pushUndo(); for (const b of info.bones) if (b.group === g) delete T[b.name]; changed(); };
 $('bFree').onclick = () => { if (!sel) return; if (isDone(BN[sel].group)) return flashLocked(); pushUndo(); for (const n of ($('withKids').checked ? subtree(sel) : [sel])) delete T[n]; changed(); };
 $('boneSel').onchange = () => { sel = $('boneSel').value || null; draw(); };
@@ -723,18 +825,18 @@ $('zoom').addEventListener('input', () => { const nz = fitZ * +$('zoom').value, 
 $('asc').addEventListener('input', () => { const ns = align.s0 * +$('asc').value; zoomAlign(ns / align.s, cw / 2, ch / 2); draw(); });
 $('alpha').addEventListener('input', draw);
 $('arot').addEventListener('input', () => { rotAlign(+$('arot').value - align.r, cw / 2, ch / 2); draw(); });
-$('mAx').onclick = () => { if (curDone()) return flashLocked(); if ($('part').value === 'torso') { draftNote = 'Spiegeln gibt es nur für Arme und Beine. '; draw(); return; } align.mx = !align.mx; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
-$('mLn').onclick = () => { if (curDone()) return flashLocked(); if ($('part').value === 'torso') { draftNote = 'Spiegeln gibt es nur für Arme und Beine. '; draw(); return; } align.my = !align.my; if (!align.mx && !align.my) delete align.mc; else ensureMc(align, $('part').value); skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
-for (const id of ['showBones', 'showAll', 'protect', 'showThreads', 'withKids', 'showSkin', 'showOrgans', 'kLen', 'kWid', 'oLen', 'oWid']) $(id).addEventListener('change', draw);
+$('mAx').onclick = () => { if (curDone()) return flashLocked(); if ($('part').value === 'torso') { draftNote = 'Spiegeln gibt es nur für Arme und Beine. '; draw(); return; } align.mx = !align.mx;  skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
+$('mLn').onclick = () => { if (curDone()) return flashLocked(); if ($('part').value === 'torso') { draftNote = 'Spiegeln gibt es nur für Arme und Beine. '; draw(); return; } align.my = !align.my;  skinCache = null; $('showSkin').checked = true; alignTouch(); schedulePreview(); draw(); };
+for (const id of ['showBones', 'protect', 'showThreads', 'withKids', 'showSkin', 'showOrgans', 'kLen', 'kWid', 'oLen', 'oWid']) $(id).addEventListener('change', draw);
 $('solo').addEventListener('change', () => { fitAlign(); draw(); });
 $('keepRef').addEventListener('change', () => { if ($('keepRef').checked) saveRef(); else if (info) kvDel('ref/' + info.kind); });
 $('menu').onclick = () => { $('drawer').classList.toggle('open'); resize(); };
 $('menuClose').onclick = () => { $('drawer').classList.remove('open'); resize(); };
-$('info').textContent = 'Aufbau: 1 Ausrichten = Referenzbild laden und die Figur-Ebene (Umriss, Knochen, Innereien) darüberlegen; ändert die Figur nicht. 2 Form = Umriss-Punkte ziehen. 3 Knochen = Knochen verschieben, drehen, skalieren (Länge/Breite getrennt wählbar) und Haut-Fäden lösen/setzen. 4 Innereien = Organe verschieben, drehen, skalieren. Jede Ansicht hat ihre Optionen direkt darunter. „Prüfen“ sucht Mängel und korrigiert sie auf Wunsch (↶ macht es rückgängig). „Übernehmen“ speichert fest, legt die Haut aus dem Referenzbild auf die Figur und startet neu. Alles wird laufend als Entwurf gesichert.';
+$('info').textContent = 'Ablauf: 1 Knochen = Knochen verschieben, per Start→Ende genau auf die Gelenke der Vorlage legen, drehen, skalieren; danach „Umriss an Knochen anpassen“. 2 Form = Umriss-Punkte ziehen. 3 Innereien = Organe und Darm verschieben, drehen, skalieren. 4 Bild/Haut = Referenzbild ausrichten (optional). „✔ Fertig“ sperrt das gewählte Teil. „Prüfen“ sucht Mängel (Beinlänge, Passung, Gelenke) und korrigiert sie auf Wunsch. „Übernehmen“ speichert fest. Alles wird laufend als Entwurf gesichert.';
 $('rot').addEventListener('change', () => { rot = +$('rot').value; try { localStorage.setItem('zd_form_rot', String(rot)); } catch (e) {} resize(); fitView(); draw(); });
 try { const r0 = localStorage.getItem('zd_form_rot'); if (r0 === '90' || r0 === '-90') { rot = +r0; $('rot').value = r0; } } catch (e) {}
 $('allowBones').addEventListener('change', () => { if ($('allowBones').checked) setMode('bone'); draw(); });
-$('part').addEventListener('change', () => { dirty = true; fillBoneSel(); fitAlign(); refreshDone(); draw(); });
+$('part').addEventListener('change', () => { asstStop(); dirty = true; fillBoneSel(); fitAlign(); refreshDone(); draw(); });
 $('btnDone').onclick = () => { const p = $('part').value; if (doneP[p]) delete doneP[p]; else doneP[p] = 1; try { localStorage.setItem(DONEKEY(info.kind), JSON.stringify(doneP)); } catch (e) {} refreshDone(); draftNote = doneP[p] ? '🔒 Teil als fertig markiert. ' : 'Teil wieder freigegeben. '; draw(); };
 $('kind').addEventListener('change', () => post({ zdForm: 'need', kind: $('kind').value }));
 $('file').onchange = (e) => {
