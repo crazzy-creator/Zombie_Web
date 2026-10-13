@@ -63,6 +63,7 @@
     <div class="row"><button id="menuClose" class="main">Fertig</button></div>
   </div>
   <main>
+    <div class="row" id="jointRow" style="display:none"><span class="hint">Gelenk:</span><select id="jointSel"></select><button id="jL">◀</button><button id="jU">▲</button><button id="jD">▼</button><button id="jR">▶</button><button id="jZero">auf 0</button><span class="hint" id="jointInfo">Gelenk antippen (oder oben wählen), dann auf freier Fläche ziehen oder mit den Pfeilen (0,2 cm) verschieben.</span></div>
     <div class="row">
       <button id="mBone" class="sel">1 Knochen</button>
       <button id="mForm">2 Form</button>
@@ -113,6 +114,7 @@
         </div>
         <div class="row" id="layerRow"><span class="hint">Ebene (hinten → vorn):</span><span id="layerList"></span><button id="lFront">▲ nach vorn</button><button id="lBack">▼ nach hinten</button><button id="lStd">Standard</button></div>
         <div class="row" id="goRow"><span class="hint">Nur im Spiel verschieben (der Editor bleibt, wie er ist):</span><button id="goL">◀</button><button id="goU">▲</button><button id="goD">▼</button><button id="goR">▶</button><span id="goInfo" class="hint"></span><button id="goReset">auf 0</button></div>
+        <div class="row"><span class="hint">Dieses Teil:</span><label>Netzfeinheit <input id="msR" type="range" min="0.5" max="1.4" step="0.05" value="1" title="Kleiner = feineres Netz (mehr Dreiecke, Finger/Nase werden genauer, aber etwas langsamer)"></label><span class="hint" id="msInfo"></span><label>Reißfestigkeit <input id="tgR" type="range" min="1" max="3" step="0.1" value="1" title="Höher = die Haut dieses Teils reißt später"></label><span class="hint" id="tgInfo"></span></div>
         <div class="row"><label><input id="blendOn" type="checkbox"> Arme/Beine am Gelenk in den Körper überblenden (nur Grafik)</label><input id="blendR" type="range" min="3" max="14" step="0.5" value="8" title="Wie weit die Überblendung reicht (cm)"><span class="hint" id="blendInfo"></span></div>
         <div class="row">
           <button id="bFree">Knochen zurück</button>
@@ -151,6 +153,9 @@ const topQ = new URLSearchParams(location.search).get('top');
 if (topQ) document.documentElement.style.setProperty('--top', Math.max(0, +topQ || 0) + 'px');
 if (EMB) $('close').style.display = '';
 const KINDS = [['zombie', 'Zombie'], ['fat', 'Fetter Zombie'], ['alien', 'Alien'], ['robot', 'Roboter']];
+let MS = {};   // Netzfeinheit je Teil (Faktor, Standard 1)
+let TG = {};   // Reißfestigkeit je Teil (Faktor, Standard 1)
+let selJoint = null, hoverJoint = null;
 let GO = {};   // nur im Spiel: Versatz je Arm/Bein [dx,dy] cm
 let BL = 0;    // nur Grafik: Überblend-Radius am Gelenk (cm), 0 = aus
 let ZZ = null;   // Zeichen-Reihenfolge der Teile (null = Standard)
@@ -270,7 +275,7 @@ async function setInfo(msg) {
   if (msg.native) $('rotLbl').style.display = 'none';
   info = msg.info; saved = msg.saved || {}; BN = {}; NAMES = info.bones.map((b) => b.name); for (const b of info.bones) BN[b.name] = b;
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
-  T = {}; TF = {}; FL = new Set(msg.custom && msg.custom.flip || []); JO = msg.custom && msg.custom.jointOff ? JSON.parse(JSON.stringify(msg.custom.jointOff)) : {}; ZZ = msg.custom && msg.custom.z ? { ...msg.custom.z } : null; GO = msg.custom && msg.custom.gameOff ? JSON.parse(JSON.stringify(msg.custom.gameOff)) : {}; BL = msg.custom && msg.custom.blend || 0; const cust = msg.custom;
+  T = {}; TF = {}; FL = new Set(msg.custom && msg.custom.flip || []); JO = msg.custom && msg.custom.jointOff ? JSON.parse(JSON.stringify(msg.custom.jointOff)) : {}; ZZ = msg.custom && msg.custom.z ? { ...msg.custom.z } : null; GO = msg.custom && msg.custom.gameOff ? JSON.parse(JSON.stringify(msg.custom.gameOff)) : {}; BL = msg.custom && msg.custom.blend || 0; MS = msg.custom && msg.custom.mesh ? { ...msg.custom.mesh } : {}; TG = msg.custom && msg.custom.tough ? { ...msg.custom.tough } : {}; const cust = msg.custom;
   if (cust) for (const k in cust.bones || {}) T[k] = tFrom(cust.bones[k]);
   if (cust) for (const k in cust.fingers || {}) if (BN[k]) T[k] = tFrom(cust.fingers[k]);
   O = {}; if (cust) for (const k in cust.organs || {}) O[k] = cust.organs[k].slice();
@@ -288,7 +293,7 @@ async function setInfo(msg) {
   ref = null; await loadRef(info.kind);
   let legacy = false; for (const k in aligns) if (aligns[k] && (aligns[k].mx || aligns[k].my)) { delete aligns[k].mx; delete aligns[k].my; delete aligns[k].mc; legacy = true; }
   if (legacy) draftNote = 'Hinweis: Die alte Bild-Spiegelung gibt es nicht mehr. Wurde ein Arm/Bein damit bearbeitet, erscheint er jetzt gespiegelt zum Bild – einmal „⇋ Teil spiegeln“ drücken, dann stimmt es auch im Spiel. ';
-  refreshDone(); updLayers(); updGO(); fitView(); fitAlign(); draw(); pvBitmap = null; for (const k in pvKeys) delete pvKeys[k]; schedulePreview();
+  refreshDone(); updLayers(); updGO(); updMS(); fitView(); fitAlign(); draw(); pvBitmap = null; for (const k in pvKeys) delete pvKeys[k]; schedulePreview();
 }
 let draftNote = '';
 
@@ -320,11 +325,13 @@ function currentData() {
   if (ZZ) data.z = { ...ZZ };
   if (Object.keys(GO).length) data.gameOff = JSON.parse(JSON.stringify(GO));
   if (BL > 0) data.blend = BL;
+  if (Object.keys(MS).length) data.mesh = { ...MS };
+  if (Object.keys(TG).length) data.tough = { ...TG };
   if (Object.keys(JO).length) data.jointOff = Object.fromEntries(Object.entries(JO).map(([k, v]) => [k, [Math.round(v[0] * 100) / 100, Math.round(v[1] * 100) / 100]]));
   for (const k in links) { const l = links[k]; if (!l.off.size && !l.on.size) continue; data.links[k] = { off: [...l.off].map((i) => [info.verts[i].x, info.verts[i].y]), on: [...l.on].map((i) => [info.verts[i].x, info.verts[i].y]) }; }
   return data;
 }
-function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length && !Object.keys(d.fingers || {}).length && !(d.flip || []).length && !Object.keys(d.jointOff || {}).length && !d.z && !Object.keys(d.gameOff || {}).length && !(d.blend > 0); }
+function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length && !Object.keys(d.fingers || {}).length && !(d.flip || []).length && !Object.keys(d.jointOff || {}).length && !d.z && !Object.keys(d.gameOff || {}).length && !(d.blend > 0) && !Object.keys(d.mesh || {}).length && !Object.keys(d.tough || {}).length; }
 let draftTimer = 0;
 function fingerData() { const o = {}; for (const k in T) if (BN[k] && BN[k].editorOnly && hasT(T[k])) o[k] = T[k].map((v) => Math.round(v * 1000) / 1000); return o; }
 function saveDraft() { schedulePreview(); scheduleMesh(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fit = TF; if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
@@ -335,7 +342,7 @@ function applyDraft(d) {
   T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = tFrom(d.bones[k]);
   for (const k in d.fingers || {}) if (BN[k]) T[k] = tFrom(d.fingers[k]);
   O = {}; for (const k in d.organs || {}) O[k] = d.organs[k].slice();
-  FL = new Set(d.flip || []); JO = d.jointOff ? JSON.parse(JSON.stringify(d.jointOff)) : {}; ZZ = d.z ? { ...d.z } : null; GO = d.gameOff ? JSON.parse(JSON.stringify(d.gameOff)) : {}; BL = d.blend || 0; links = linksFrom(d.links); if (d.fit) TF = d.fit; else baseline();
+  FL = new Set(d.flip || []); JO = d.jointOff ? JSON.parse(JSON.stringify(d.jointOff)) : {}; ZZ = d.z ? { ...d.z } : null; GO = d.gameOff ? JSON.parse(JSON.stringify(d.gameOff)) : {}; BL = d.blend || 0; MS = d.mesh ? { ...d.mesh } : {}; TG = d.tough ? { ...d.tough } : {}; links = linksFrom(d.links); if (d.fit) TF = d.fit; else baseline();
 }
 
 // ---------- Rückgängig / Wiederholen ----------
@@ -387,8 +394,8 @@ function fitOutlines() {
   dirty = true; skinCache = null; return n;
 }
 
-const snap = () => JSON.stringify({ w: work, t: T, f: TF, fl: [...FL], jo: JO, zz: ZZ, go: GO, bl: BL, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
-function restore(s) { clearSel(); const o = JSON.parse(s); work = o.w; T = o.t; TF = o.f || {}; FL = new Set(o.fl || []); JO = o.jo || {}; ZZ = o.zz || null; GO = o.go || {}; BL = o.bl || 0; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
+const snap = () => JSON.stringify({ w: work, t: T, f: TF, fl: [...FL], jo: JO, zz: ZZ, go: GO, bl: BL, ms: MS, tg: TG, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
+function restore(s) { clearSel(); const o = JSON.parse(s); work = o.w; T = o.t; TF = o.f || {}; FL = new Set(o.fl || []); JO = o.jo || {}; ZZ = o.zz || null; GO = o.go || {}; BL = o.bl || 0; MS = o.ms || {}; TG = o.tg || {}; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
 function pushUndo() { const s = snap(); if (undoStack[undoStack.length - 1] !== s) { undoStack.push(s); if (undoStack.length > 60) undoStack.shift(); } redoStack = []; }
 function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); }
 function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); }
@@ -532,6 +539,36 @@ async function projectLoad(file) {
 }
 $('projSave').onclick = projectSave;
 $('projFile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) projectLoad(f); };
+
+// ---------- Netzfeinheit / Reißfestigkeit je Teil ----------
+function updMS() { const part = $('part').value; $('msR').value = MS[part] || 1; $('tgR').value = TG[part] || 1; $('msInfo').textContent = MS[part] && MS[part] !== 1 ? `${Math.round((MS[part]) * 100)} %` : ''; $('tgInfo').textContent = TG[part] && TG[part] !== 1 ? `×${(+TG[part]).toFixed(1)}` : ''; }
+$('msR').onchange = () => { const part = $('part').value, v = +$('msR').value; pushUndo(); if (v === 1) delete MS[part]; else MS[part] = v; changed(); updMS(); };
+$('tgR').onchange = () => { const part = $('part').value, v = +$('tgR').value; pushUndo(); if (v === 1) delete TG[part]; else TG[part] = v; changed(); updMS(); };
+
+// ---------- Gelenk-Werkzeug: Auswahl, Hervorhebung, Feinverschiebung ----------
+const JNAME = [[/^ellbogen/, 'Ellbogen'], [/^kni/, 'Knie'], [/^hueft/, 'Hüfte'], [/^handgelenk/, 'Handgelenk'], [/^knoechel/, 'Knöchel'], [/^schulter/, 'Schulter'], [/^sb/, 'Schulterblatt'], [/^sk/, 'Schlüsselbein'], [/^hwk/, 'Halswirbel'], [/^bwk/, 'Brustwirbel'], [/^lwk/, 'Lendenwirbel'], [/^kopf/, 'Kopf'], [/^kiefer/, 'Kiefer'], [/^rippe(\d+)_w/, 'Rippe $1 (Wirbel)'], [/^rippe(\d+)_s/, 'Rippe $1 (Brustbein)']];
+function jointLabel(j) { for (const [re, t] of JNAME) { const m = re.exec(j.name); if (m) return t.replace('$1', m[1] || '') + (/[NF]$/.test(j.name) ? (j.name.endsWith('N') ? ' vorn' : ' hinten') : ''); } return j.name; }
+const jointsOfPart = () => { const part = $('part').value; return info.joints.filter((j) => BN[j.a].group === part || BN[j.b].group === part); };
+function fillJointSel() { const sl = $('jointSel'); sl.innerHTML = ''; sl.add(new Option('wählen …', '')); for (const j of jointsOfPart()) sl.add(new Option(jointLabel(j), j.name)); sl.value = selJoint && jointsOfPart().some((j) => j.name === selJoint) ? selJoint : ''; if (!sl.value) selJoint = null; }
+function showJointRow() { $('jointRow').style.display = mode === 'bone' && boneAct === 'joint' ? '' : 'none'; if (mode === 'bone' && boneAct === 'joint') fillJointSel(); }
+function boneBox(n) { const b = BN[n]; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const t of b.tris) for (let k = 0; k < 6; k += 2) { const q = bp(b, t[k], t[k + 1]); x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); } return [x0, y0, x1, y1]; }
+function dashBone(n, col) { const [x0, y0, x1, y1] = boneBox(n), a = cmToScr(x0, y0), b = cmToScr(x1, y1), pad = 5; c.save(); c.setLineDash([6, 4]); c.strokeStyle = col; c.lineWidth = 2; c.strokeRect(Math.min(a[0], b[0]) - pad, Math.min(a[1], b[1]) - pad, Math.abs(b[0] - a[0]) + 2 * pad, Math.abs(b[1] - a[1]) + 2 * pad); c.restore(); }
+function drawJointTool() {
+  const list = jointsOfPart(); c.font = '11px system-ui'; c.textAlign = 'left';
+  for (const j of list) {
+    const o = jointPos(j), [sx, sy] = cmToScr(o[0], o[1]), on = j.name === selJoint, hv = j.name === hoverJoint;
+    c.save(); c.setLineDash([4, 3]); c.lineWidth = on ? 2.5 : 1.5; c.strokeStyle = on ? '#ffd84a' : hv ? '#fff' : 'rgba(255,216,74,.65)'; c.beginPath(); c.arc(sx, sy, on ? 15 : 12, 0, 6.3); c.stroke(); c.restore();
+    if (on || hv || list.length <= 8) { c.fillStyle = on ? '#ffd84a' : '#fff'; c.fillText(jointLabel(j), sx + 16, sy - 12); }
+  }
+  const j = info.joints.find((q) => q.name === (selJoint || hoverJoint));
+  if (j) { dashBone(j.a, '#4af'); dashBone(j.b, '#4f8'); }
+}
+function nearestJoint(p, maxd) { let best = null, bd = maxd; for (const j of jointsOfPart()) { const o = jointPos(j), s2 = cmToScr(o[0], o[1]), d = Math.hypot(s2[0] - p[0], s2[1] - p[1]); if (d < bd) { bd = d; best = j; } } return best; }
+function setSelJoint(n) { selJoint = n; $('jointSel').value = n || ''; const j = info.joints.find((q) => q.name === n); $('jointInfo').textContent = j ? `${jointLabel(j)}: verbindet ${BN[j.a].label || j.a} (blau) und ${BN[j.b].label || j.b} (grün). Auf freier Fläche ziehen oder Pfeile.` : 'Gelenk antippen (oder oben wählen), dann auf freier Fläche ziehen oder mit den Pfeilen (0,2 cm) verschieben.'; draw(); }
+$('jointSel').onchange = () => setSelJoint($('jointSel').value || null);
+function nudgeJoint(dx, dy) { if (!selJoint) { draftNote = 'Erst ein Gelenk antippen oder oben wählen. '; draw(); return; } const g = info.joints.find((q) => q.name === selJoint); if (isDone(BN[g.a].group) || isDone(BN[g.b].group)) return flashLocked(); pushUndo(); const o = JO[selJoint] || (JO[selJoint] = [0, 0]); o[0] += dx; o[1] += dy; if (Math.abs(o[0]) < 0.005 && Math.abs(o[1]) < 0.005) delete JO[selJoint]; changed(); }
+$('jL').onclick = () => nudgeJoint(-0.2, 0); $('jR').onclick = () => nudgeJoint(0.2, 0); $('jU').onclick = () => nudgeJoint(0, -0.2); $('jD').onclick = () => nudgeJoint(0, 0.2);
+$('jZero').onclick = () => { if (!selJoint || !JO[selJoint]) return; pushUndo(); delete JO[selJoint]; changed(); };
 
 // ---------- Nur Spiel: Versatz der Gliedmaßen und Überblenden am Gelenk ----------
 const LIMBS = ['armN', 'armF', 'beinN', 'beinF'];
@@ -853,6 +890,7 @@ function paint() {
   }
   if (drag && drag.kind === 'span') { const [x1, y1] = cmToScr(drag.p1[0], drag.p1[1]), [x2, y2] = cmToScr(drag.p2[0], drag.p2[1]); c.strokeStyle = '#4af'; c.lineWidth = 2; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); c.fillStyle = '#4f4'; c.beginPath(); c.arc(x1, y1, 6, 0, 6.3); c.fill(); c.fillStyle = '#f44'; c.beginPath(); c.arc(x2, y2, 6, 0, 6.3); c.fill(); }
   if (testRes && !testRes.error && showTest) { c.lineWidth = 2; c.strokeStyle = '#ff2a2a'; for (const t of testRes.tears) { if (t.g !== part) continue; const [sx, sy] = cmToScr(t.x, t.y); c.beginPath(); c.moveTo(sx - 5, sy - 5); c.lineTo(sx + 5, sy + 5); c.moveTo(sx + 5, sy - 5); c.lineTo(sx - 5, sy + 5); c.stroke(); } c.strokeStyle = '#ffae00'; for (const t of testRes.holes) { if (t.g !== part) continue; const [sx, sy] = cmToScr(t.x, t.y); c.strokeRect(sx - 3, sy - 3, 6, 6); } }
+  if (mode === 'bone' && boneAct === 'joint') drawJointTool();
   if (asst) { c.font = '12px system-ui'; c.textAlign = 'left'; asst.pts.forEach((q, i) => { const [sx, sy] = cmToScr(q[0], q[1]); c.beginPath(); c.arc(sx, sy, 7, 0, 6.3); c.fillStyle = '#4af'; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); c.fillStyle = '#fff'; c.fillText(ASST[asst.part].labels[i].split(' ')[0], sx + 10, sy + 4); if (i) { const [px2, py2] = cmToScr(asst.pts[i - 1][0], asst.pts[i - 1][1]); c.strokeStyle = '#4af'; c.lineWidth = 2; c.beginPath(); c.moveTo(px2, py2); c.lineTo(sx, sy); c.stroke(); } }); }
   const nl = sel ? effLinks(sel).size : 0, kids = $('withKids').checked ? ' (mit Anhang)' : ' (nur dieser Knochen)';
   const hintOrg = !selOrg ? 'Innerei antippen oder oben wählen. ' : orgAct === 'move' ? `${selOrg}: ziehen = verschieben. ` : orgAct === 'rot' ? `${selOrg}: ziehen = um die Mitte drehen. ` : `${selOrg}: ziehen = größer/kleiner (${$('oLen').checked && $('oWid').checked ? 'gleichmäßig' : $('oLen').checked ? 'nur Länge' : $('oWid').checked ? 'nur Breite' : 'nichts gewählt'}). `;
@@ -910,10 +948,11 @@ cv.addEventListener('pointerdown', (e) => {
       if (bi >= 0) { pushUndo(); const l = links[sel] || (links[sel] = { off: new Set(), on: new Set() }); const idx = NAMES.indexOf(sel); const was = info.attach.some(([vi, b2]) => vi === bi && b2 === idx); if (l.off.has(bi)) l.off.delete(bi); else if (l.on.has(bi)) l.on.delete(bi); else if (was) l.off.add(bi); else l.on.add(bi); changed(); return; }
     }
     if (boneAct === 'joint') {
-      let bj = null, bd = 16;
-      for (const j of info.joints) { const A = BN[j.a], B = BN[j.b]; if (A.group !== part && B.group !== part) continue; const o = jointPos(j), s2 = cmToScr(o[0], o[1]), d = Math.hypot(s2[0] - p[0], s2[1] - p[1]); if (d < bd) { bd = d; bj = j; } }
-      if (bj && (isDone(BN[bj.a].group) || isDone(BN[bj.b].group))) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
-      if (bj) { pushUndo(); drag = { kind: 'joint', name: bj.name, last: p }; draftNote = `Gelenk ${bj.name}: ziehen = verschieben (Rückgängig ↶). `; draw(); return; }
+      const bj = nearestJoint(p, 44);
+      if (bj) setSelJoint(bj.name);
+      const tj = bj || (selJoint ? info.joints.find((q) => q.name === selJoint) : null);
+      if (tj && (isDone(BN[tj.a].group) || isDone(BN[tj.b].group))) { flashLocked(); drag = { kind: 'pan', last: p }; return; }
+      if (tj) { pushUndo(); drag = { kind: 'joint', name: tj.name, last: p }; return; }
       drag = { kind: 'pan', last: p }; return;
     }
     if (boneAct === 'span') {
@@ -937,7 +976,7 @@ cv.addEventListener('pointerdown', (e) => {
   else drag = { kind: 'pan', last: p };
 });
 cv.addEventListener('pointermove', (e) => {
-  if (!ptrs.has(e.pointerId)) return; const p = pos(e); ptrs.set(e.pointerId, p);
+  if (!ptrs.has(e.pointerId)) { if (mode === 'bone' && boneAct === 'joint' && info) { const hj = nearestJoint(pos(e), 44); const nm = hj ? hj.name : null; if (nm !== hoverJoint) { hoverJoint = nm; draw(); } } return; } const p = pos(e); ptrs.set(e.pointerId, p);
   if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; const f = d / (pinch.d || 1), ang = Math.atan2(b[1] - a[1], b[0] - a[0]); if (mode === 'align') { zoomAlign(f, mx, my); let dang = ang - pinch.ang; if (dang > Math.PI) dang -= 2 * Math.PI; if (dang < -Math.PI) dang += 2 * Math.PI; rotAlign((dang * 180) / Math.PI, mx, my); align.tx += (mx - pinch.mx) / view.z; align.ty += (my - pinch.my) / view.z; } else { zoomView(f, mx, my); view.px += mx - pinch.mx; view.py += my - pinch.my; } pinch = { ...pinch, d, mx, my, ang, moved: pinch.moved || Math.abs(d - pinch.d0) > 10 || Math.hypot(mx - pinch.x0, my - pinch.y0) > 10 }; draw(); return; }
   if (!drag) return;
   const part = $('part').value;
@@ -991,12 +1030,12 @@ cv.addEventListener('dblclick', (e) => {
 cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); (mode === 'align' ? zoomAlign : zoomView)(e.deltaY < 0 ? 1.1 : 1 / 1.1, p[0], p[1]); draw(); }, { passive: false });
 
 function setMode(m) {
-  asstStop(); clearSel(); mode = m; if (m === 'organ' && $('part').value !== 'torso') { $('part').value = 'torso'; dirty = true; fitAlign(); }
+  asstStop(); clearSel(); mode = m; setTimeout(showJointRow, 0); if (m === 'organ' && $('part').value !== 'torso') { $('part').value = 'torso'; dirty = true; fitAlign(); }
   for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone'], ['mOrgan', 'organ']]) $(id).classList.toggle('sel', m === mm);
   $('alignRows').style.display = m === 'align' ? '' : 'none'; $('formRows').style.display = m === 'form' ? '' : 'none'; $('boneRows').style.display = m === 'bone' ? '' : 'none'; $('organRows').style.display = m === 'organ' ? '' : 'none';
   $('alignSliders').style.display = m === 'align' ? '' : 'none'; resize();
 }
-function setAct(a) { boneAct = a; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bScale', 'scale'], ['bJoint', 'joint'], ['bSpan', 'span'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); $('kScale').style.display = a === 'scale' ? '' : 'none'; draw(); }
+function setAct(a) { boneAct = a; hoverJoint = null; if (a !== 'joint') selJoint = null; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bScale', 'scale'], ['bJoint', 'joint'], ['bSpan', 'span'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); $('kScale').style.display = a === 'scale' ? '' : 'none'; showJointRow(); draw(); }
 function setOrgAct(a) { orgAct = a; for (const [id, aa] of [['oMove', 'move'], ['oRot', 'rot'], ['oScale', 'scale']]) $(id).classList.toggle('sel', a === aa); $('oScaleOpts').style.display = a === 'scale' ? '' : 'none'; draw(); }
 $('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone'); $('mOrgan').onclick = () => setMode('organ');
 $('oMove').onclick = () => setOrgAct('move'); $('oRot').onclick = () => setOrgAct('rot'); $('oScale').onclick = () => setOrgAct('scale');
@@ -1029,7 +1068,7 @@ $('info').textContent = 'Ablauf: 1 Knochen = Knochen verschieben, per Start→En
 $('rot').addEventListener('change', () => { rot = +$('rot').value; try { localStorage.setItem('zd_form_rot', String(rot)); } catch (e) {} resize(); fitView(); draw(); });
 try { const r0 = localStorage.getItem('zd_form_rot'); if (r0 === '90' || r0 === '-90') { rot = +r0; $('rot').value = r0; } } catch (e) {}
 $('allowBones').addEventListener('change', () => { if ($('allowBones').checked) setMode('bone'); draw(); });
-$('part').addEventListener('change', () => { asstStop(); clearSel(); updLayers(); updGO(); dirty = true; fillBoneSel(); fitAlign(); refreshDone(); draw(); });
+$('part').addEventListener('change', () => { asstStop(); clearSel(); updLayers(); updGO(); updMS(); selJoint = null; showJointRow(); dirty = true; fillBoneSel(); fitAlign(); refreshDone(); draw(); });
 $('btnDone').onclick = () => { const p = $('part').value; if (doneP[p]) delete doneP[p]; else doneP[p] = 1; try { localStorage.setItem(DONEKEY(info.kind), JSON.stringify(doneP)); } catch (e) {} refreshDone(); draftNote = doneP[p] ? '🔒 Teil als fertig markiert. ' : 'Teil wieder freigegeben. '; draw(); };
 $('kind').addEventListener('change', () => post({ zdForm: 'need', kind: $('kind').value }));
 $('file').onchange = (e) => {
@@ -1042,7 +1081,7 @@ $('undo').onclick = undo; $('redo').onclick = redo;
 window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); } });
 $('check').onclick = () => { if (info) showCheck(); };
 $('resetPart').onclick = () => { if (curDone()) return flashLocked(); pushUndo(); const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
-$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; TF = {}; FL = new Set(); JO = {}; ZZ = null; GO = {}; BL = 0; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
+$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; TF = {}; FL = new Set(); JO = {}; ZZ = null; GO = {}; BL = 0; MS = {}; TG = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
 $('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; changed(); };
 $('resetLinks').onclick = () => { pushUndo(); if (sel) delete links[sel]; else links = {}; changed(); };
 let resetSkins = false;
