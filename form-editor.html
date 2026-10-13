@@ -6,7 +6,7 @@
 <title>Form-Editor</title>
 <style>
   html,body{margin:0;height:100%;background:#141010;color:#e6dcdc;font-family:system-ui,sans-serif;overflow:hidden;touch-action:manipulation}
-  #app{display:flex;flex-direction:column;height:100%}
+  #app{display:flex;flex-direction:column;height:100%;position:relative}
   #app.rot{position:fixed;left:0;top:0;transform-origin:0 0}
   @media (max-width:700px){button,select,label.btn{padding:5px 7px;font-size:12px}.row{gap:5px;font-size:12px}input[type=range]{width:90px}header h1{display:none}}
   header{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px;padding-top:calc(6px + max(env(safe-area-inset-top), var(--top, 0px)));padding-left:max(6px, env(safe-area-inset-left));padding-right:max(6px, env(safe-area-inset-right));background:#1c1616;border-bottom:1px solid #3a2e2e}
@@ -31,9 +31,11 @@
   #meas .m{display:flex;gap:6px;align-items:center;margin:5px 0;flex-wrap:wrap}
   #meas input[type=number]{width:64px;background:#0c0909;color:#ddd;border:1px solid #4a4040;border-radius:6px;padding:4px}
   #chk .bad{color:#ff8a8a}#chk .ok{color:#8aff9a}#chk .warn{color:#ffd37a}
-  #pv{position:absolute;top:6px;right:6px;width:150px;height:262px;background:#171212;border:1px solid #5a4646;border-radius:8px;z-index:4;overflow:hidden;touch-action:none}
+  #pv{position:absolute;left:auto;top:60px;right:10px;width:170px;height:300px;min-width:110px;min-height:150px;background:#171212;border:1px solid #7a6060;border-radius:8px;z-index:200;overflow:hidden;touch-action:none;box-shadow:0 4px 18px rgba(0,0,0,.6)}
+  #pvtitle{position:absolute;left:0;right:0;top:0;height:20px;background:rgba(10,8,8,.82);color:#a89898;font-size:11px;line-height:20px;text-align:center;cursor:move;z-index:2;touch-action:none;user-select:none}
+  #pvsize{position:absolute;right:0;bottom:0;width:26px;height:26px;z-index:3;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,#9a8484 50%,#9a8484 58%,transparent 58%,transparent 70%,#9a8484 70%,#9a8484 78%,transparent 78%)}
   #pv canvas{width:100%;height:100%}
-  #pvbar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:3px;padding:3px;background:rgba(10,8,8,.7);font-size:11px;align-items:center}
+  #pvbar{position:absolute;left:0;right:26px;bottom:0;display:flex;gap:3px;padding:3px;background:rgba(10,8,8,.7);font-size:11px;align-items:center}
   #pvbar button{padding:2px 6px;font-size:11px}
   #ovl{position:absolute;inset:0;background:rgba(10,8,8,.95);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
   #ovl.open{display:flex}
@@ -142,10 +144,10 @@
       <span id="alignSliders"><label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
       <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label></span>
     </div>
-    <div class="box"><canvas id="cv"></canvas><div id="pv"><canvas id="pvc"></canvas><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label></div></div><div id="chk"></div><div id="meas"></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
+    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
     <div class="hint" id="status"></div>
   </main>
-</div>
+<div id="pv"><div id="pvtitle">⠿ Vorschau (ziehen)</div><canvas id="pvc"></canvas><div id="pvsize"></div><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label></div></div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const EMB = window.parent !== window;
@@ -282,6 +284,7 @@ async function setInfo(msg) {
   O = {}; if (cust) for (const k in cust.organs || {}) O[k] = cust.organs[k].slice();
   links = linksFrom(cust && cust.links);
   baseline();
+  if (cust && cust.fit) TF = JSON.parse(JSON.stringify(cust.fit));
   let note = '';
   if (!msg.fresh) { const d = loadDraft(info.kind); if (d) { applyDraft(d); note = 'Entwurf geladen. '; } }
   // Bone-Auswahl
@@ -292,6 +295,7 @@ async function setInfo(msg) {
   $('kind').value = info.kind; sel = null; dirty = true; draftNote = note; undoStack = []; redoStack = [];
   for (const k in aligns) delete aligns[k]; for (const k in touched) delete touched[k];
   ref = null; await loadRef(info.kind);
+  if (cust && cust.ed) { for (const k in cust.ed.aligns || {}) aligns[k] = JSON.parse(JSON.stringify(cust.ed.aligns[k])); for (const k in cust.ed.touched || {}) touched[k] = cust.ed.touched[k]; if (cust.ed.done) { doneP = { ...cust.ed.done }; try { localStorage.setItem(DONEKEY(info.kind), JSON.stringify(doneP)); } catch (e) { /* egal */ } } }
   let legacy = false; for (const k in aligns) if (aligns[k] && (aligns[k].mx || aligns[k].my)) { delete aligns[k].mx; delete aligns[k].my; delete aligns[k].mc; legacy = true; }
   if (legacy) draftNote = 'Hinweis: Die alte Bild-Spiegelung gibt es nicht mehr. Wurde ein Arm/Bein damit bearbeitet, erscheint er jetzt gespiegelt zum Bild – einmal „⇋ Teil spiegeln“ drücken, dann stimmt es auch im Spiel. ';
   refreshDone(); updLayers(); updGO(); updMS(); fitView(); fitAlign(); draw(); pvBitmap = null; for (const k in pvKeys) delete pvKeys[k]; schedulePreview();
@@ -333,6 +337,8 @@ function currentData() {
   for (const k in links) { const l = links[k]; if (!l.off.size && !l.on.size) continue; data.links[k] = { off: [...l.off].map((i) => [info.verts[i].x, info.verts[i].y]), on: [...l.on].map((i) => [info.verts[i].x, info.verts[i].y]) }; }
   return data;
 }
+// Editor-Zustand (Lage der Teile zum Foto, Basis je Teil, fertig-Marken) wandert mit ins Modell, damit Laden/Wiederöffnen alles an derselben Stelle zeigt (das Spiel ignoriert diese Felder)
+function withEd(d) { d.fit = JSON.parse(JSON.stringify(TF)); d.ed = { aligns: JSON.parse(JSON.stringify(aligns)), touched: { ...touched }, done: { ...doneP } }; return d; }
 function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length && !Object.keys(d.fingers || {}).length && !(d.flip || []).length && !Object.keys(d.jointOff || {}).length && !d.z && !Object.keys(d.gameOff || {}).length && !(d.blend > 0) && !Object.keys(d.gameScale || {}).length && !Object.keys(d.mesh || {}).length && !Object.keys(d.tough || {}).length; }
 let draftTimer = 0;
 function fingerData() { const o = {}; for (const k in T) if (BN[k] && BN[k].editorOnly && hasT(T[k])) o[k] = T[k].map((v) => Math.round(v * 1000) / 1000); return o; }
@@ -514,6 +520,11 @@ async function projectSave() {
   const skins = {}; const all = await kvList('skin/' + info.kind + '/'); for (const k in all) skins[k.split('/').pop()] = all[k];
   const proj = { zdProject: 1, app: 'zombie-form-editor', kind: info.kind, savedAt: new Date().toISOString(), data: currentData(), fit: TF, done: doneP, aligns, touched, useRef: $('useRef').checked, keepRef: $('keepRef').checked, solo: $('solo').checked, refWork: refData, refOrig, skins };
   const text = JSON.stringify(proj), name = `zombie-projekt-${info.kind}-${new Date().toISOString().slice(0, 10)}.json`;
+  // Eingebettet (Spiel/APK): zuerst das Spiel speichern lassen (APK: Teilen-Dialog); sonst Download im Browser
+  if (EMB) {
+    const r = await new Promise((res) => { let got = false; const h = (e) => { const d = e.data; if (!d || !d.zdFormSaved) return; got = true; if (d.ack) return; window.removeEventListener('message', h); res(d); }; window.addEventListener('message', h); post({ zdForm: 'saveFile', name, text }); setTimeout(() => { if (!got) { window.removeEventListener('message', h); res({ native: false }); } }, 2500); });
+    if (r.native !== false) { draftNote = r.ok ? `Projekt gesendet: ${name} (${(text.length / 1048576).toFixed(1)} MB) – im Teilen-Dialog „Dateien“/Drive wählen. ` : `⚠ Speichern fehlgeschlagen: ${r.msg || 'unbekannt'}. `; draw(); return; }
+  }
   try {
     const file = new File([text], name, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) { await navigator.share({ files: [file], title: name }); draftNote = `Projekt geteilt (${(text.length / 1048576).toFixed(1)} MB). `; draw(); return; }
@@ -1092,14 +1103,14 @@ $('resetLinks').onclick = () => { pushUndo(); if (sel) delete links[sel]; else l
 let resetSkins = false;
 $('apply').onclick = async () => {
   $('status').textContent = 'Speichere …';
-  const kind = info.kind, data = currentData();
+  const kind = info.kind, data = withEd(currentData());
   if (resetSkins) { for (const [p] of PARTS) await kvDel(`skin/${kind}/${p}`); resetSkins = false; }
   let made = [];
   if ($('useRef').checked && ref) for (const [p, l] of PARTS) { const key = kind + '/' + ($('solo').checked ? p : 'all'); if (!touched[key]) continue; const sk = genSkin(p); if (sk) { await kvSet(`skin/${kind}/${p}`, sk); made.push(l); } }
   post({ zdForm: 'save', kind, data }); saveDraft();
 };
 $('close').onclick = () => post({ zdForm: 'close' });
-function exportText() { const kinds = JSON.parse(JSON.stringify(saved)); const d = currentData(); if (isEmpty(d)) delete kinds[info.kind]; else kinds[info.kind] = d; return JSON.stringify({ zdShapes: 1, kinds }); }
+function exportText() { const kinds = JSON.parse(JSON.stringify(saved)); const d = currentData(); if (isEmpty(d)) delete kinds[info.kind]; else kinds[info.kind] = withEd(d); return JSON.stringify({ zdShapes: 1, kinds }); }
 $('xfer').onclick = () => { $('ta').value = exportText(); $('taInfo').textContent = 'Das ist der Stand dieses Editors (auch nicht übernommene Änderungen; Haut-Texturen sind nicht enthalten). Text kopieren und sichern – oder gesicherten Text hier einfügen und „Einlesen“ drücken.'; $('ovl').classList.add('open'); };
 $('taClose').onclick = () => $('ovl').classList.remove('open');
 $('taCopy').onclick = () => { $('ta').select(); try { navigator.clipboard.writeText($('ta').value); $('taInfo').textContent = 'Kopiert.'; } catch (e) { document.execCommand('copy'); } };
@@ -1107,34 +1118,52 @@ $('taLoad').onclick = () => post({ zdForm: 'import', text: $('ta').value, kind: 
 function post(m) { if (EMB) window.parent.postMessage(m, '*'); }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormInfo) return; if (d.error) { $('taInfo').textContent = d.error; return; } setInfo(d).then(() => $('ovl').classList.remove('open')); });
 // ---------- Vorschau-Fenster (Echtzeit-Ergebnis aus dem Spiel) ----------
-let pvBitmap = null, pvBusy = false, pvTimer = 0, pvDirty = false, pvView = { z: 1, x: 0, y: 0 }, pvBig = false;
+let pvBitmap = null, pvBusy = false, pvTimer = 0, pvDirty = false, pvView = { z: 1, x: 0, y: 0 }, pvBig = false, pvSent = null;
 const pvc = $('pvc'), pvx = pvc.getContext('2d'), pvSkins = {}, pvKeys = {};
-function pvResize() { const r = $('pv').getBoundingClientRect(), d = window.devicePixelRatio || 1; const w = $('pv').clientWidth, h = $('pv').clientHeight; pvc.width = Math.max(10, Math.round(w * d)); pvc.height = Math.max(10, Math.round(h * d)); pvPaint(); void r; }
+function pvResize() { const w = $('pv').clientWidth, h = $('pv').clientHeight, d = window.devicePixelRatio || 1; const nw = Math.max(10, Math.round(w * d)), nh = Math.max(10, Math.round(h * d)); if (nw !== pvc.width || nh !== pvc.height) { pvc.width = nw; pvc.height = nh; schedulePreview(); } pvPaint(); }
+// pvBitmap = { img, W, H, z, x, y, q }: Bild wurde für diese Ansicht (Zoom z, Verschiebung x/y in Zeichenflächen-Pixeln) scharf gerendert (q = Bild-Pixel je Zeichenflächen-Pixel)
 function pvPaint() {
   const w = pvc.width, h = pvc.height; pvx.setTransform(1, 0, 0, 1, 0, 0); pvx.fillStyle = '#1b1515'; pvx.fillRect(0, 0, w, h);
   if (!pvBitmap) { pvx.fillStyle = '#6a5a5a'; pvx.font = `${12 * (window.devicePixelRatio || 1)}px system-ui`; pvx.textAlign = 'center'; pvx.fillText($('pvLive').checked ? 'Vorschau lädt …' : 'Vorschau aus', w / 2, h / 2); return; }
-  const fit = Math.min(w / pvBitmap.width, h / pvBitmap.height), k = fit * pvView.z;
-  pvx.imageSmoothingQuality = 'high'; pvx.drawImage(pvBitmap, w / 2 - (pvBitmap.width * k) / 2 + pvView.x, h / 2 - (pvBitmap.height * k) / 2 + pvView.y, pvBitmap.width * k, pvBitmap.height * k);
+  const bm = pvBitmap, r = pvView.z / bm.z; // bis das scharfe Bild für die neue Ansicht da ist, wird das alte skaliert (kurz unscharf)
+  pvx.imageSmoothingQuality = 'high'; pvx.drawImage(bm.img, (w / 2) * (1 - r) - bm.x * r + pvView.x, (h / 2) * (1 - r) - bm.y * r + pvView.y, (bm.W / bm.q) * r, (bm.H / bm.q) * r);
 }
 function schedulePreview() { if (!info || !EMB || !$('pvLive').checked) return; pvDirty = true; if (pvTimer || pvBusy) return; pvTimer = setTimeout(sendPreview, 280); }
 function sendPreview() {
   pvTimer = 0; if (!pvDirty || pvBusy || !info) return; pvDirty = false; pvBusy = true;
   const skins = {};
   if ($('useRef').checked && ref) for (const [p] of PARTS) { const key = info.kind + '/' + ($('solo').checked ? p : 'all'); if (!touched[key] || !aligns[key]) continue; const ck = JSON.stringify([aligns[key], work[p]]); if (pvKeys[p] !== ck) { const r = skinCanvas(p, aligns[key]), sc = Math.min(1, 512 / Math.max(r.cvs.width, r.cvs.height)), t = document.createElement('canvas'); t.width = Math.round(r.cvs.width * sc); t.height = Math.round(r.cvs.height * sc); t.getContext('2d').drawImage(r.cvs, 0, 0, t.width, t.height); pvSkins[p] = { dataUrl: t.toDataURL('image/jpeg', 0.85), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] }; pvKeys[p] = ck; } skins[p] = pvSkins[p]; }
-  post({ zdForm: 'preview', kind: info.kind, data: currentData(), skins, w: 480, h: 840 });
+  const q = Math.min(1, 1800 / Math.max(pvc.width, pvc.height)); pvSent = { z: pvView.z, x: pvView.x, y: pvView.y, q, W: Math.round(pvc.width * q), H: Math.round(pvc.height * q) };
+  post({ zdForm: 'preview', kind: info.kind, data: currentData(), skins, w: pvSent.W, h: pvSent.H, view: { z: pvView.z, x: pvView.x * q, y: pvView.y * q } });
   setTimeout(() => { if (pvBusy) { pvBusy = false; if (pvDirty) schedulePreview(); } }, 6000);
 }
-window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormPreview) return; pvBusy = false; if (d.bitmap) { pvBitmap = d.bitmap; pvPaint(); } if (pvDirty) schedulePreview(); });
-$('pvP').onclick = () => { pvView.z = Math.min(40, pvView.z * 1.4); pvPaint(); }; $('pvM').onclick = () => { pvView.z = Math.max(0.4, pvView.z / 1.4); pvPaint(); };
-$('pvR').onclick = () => { pvView = { z: 1, x: 0, y: 0 }; pvPaint(); };
-$('pvBig').onclick = () => { pvBig = !pvBig; $('pv').style.width = pvBig ? '320px' : '150px'; $('pv').style.height = pvBig ? '560px' : '262px'; pvResize(); };
+window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormPreview) return; pvBusy = false; if (d.bitmap && pvSent) { pvBitmap = { img: d.bitmap, W: pvSent.W, H: pvSent.H, z: pvSent.z, x: pvSent.x, y: pvSent.y, q: pvSent.q }; pvPaint(); } if (pvDirty) schedulePreview(); });
+$('pvP').onclick = () => { pvView.z = Math.min(40, pvView.z * 1.4); pvPaint(); schedulePreview(); }; $('pvM').onclick = () => { pvView.z = Math.max(0.4, pvView.z / 1.4); pvPaint(); schedulePreview(); };
+$('pvR').onclick = () => { pvView = { z: 1, x: 0, y: 0 }; pvPaint(); schedulePreview(); };
+$('pvBig').onclick = () => { pvBig = !pvBig; $('pv').style.width = pvBig ? '340px' : '170px'; $('pv').style.height = pvBig ? '600px' : '300px'; pvClamp(); pvSave(); pvResize(); };
 $('pvLive').onchange = () => { if ($('pvLive').checked) { pvDirty = true; sendPreview(); } else pvPaint(); };
 let pvDrag = null;
 $('pv').addEventListener('pointerdown', (e) => { if (e.target.closest('#pvbar')) return; pvDrag = { x: e.clientX, y: e.clientY }; $('pv').setPointerCapture(e.pointerId); e.stopPropagation(); });
-$('pv').addEventListener('pointermove', (e) => { if (!pvDrag) return; const d = window.devicePixelRatio || 1, f = rot === 0 ? 1 : 1; let dx = e.clientX - pvDrag.x, dy = e.clientY - pvDrag.y; if (rot === 90) [dx, dy] = [dy, -dx]; else if (rot === -90) [dx, dy] = [-dy, dx]; pvView.x += dx * d * f; pvView.y += dy * d * f; pvDrag = { x: e.clientX, y: e.clientY }; pvPaint(); });
+$('pv').addEventListener('pointermove', (e) => { if (!pvDrag) return; const d = window.devicePixelRatio || 1, f = rot === 0 ? 1 : 1; let dx = e.clientX - pvDrag.x, dy = e.clientY - pvDrag.y; if (rot === 90) [dx, dy] = [dy, -dx]; else if (rot === -90) [dx, dy] = [-dy, dx]; pvView.x += dx * d * f; pvView.y += dy * d * f; pvDrag = { x: e.clientX, y: e.clientY }; pvPaint(); schedulePreview(); });
 $('pv').addEventListener('pointerup', () => { pvDrag = null; }); $('pv').addEventListener('pointercancel', () => { pvDrag = null; });
-$('pv').addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation(); pvView.z = Math.max(0.4, Math.min(40, pvView.z * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); pvPaint(); }, { passive: false });
-setMode('bone'); resize(); pvResize(); fitView();
+$('pv').addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation(); pvView.z = Math.max(0.4, Math.min(40, pvView.z * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); pvPaint(); schedulePreview(); }, { passive: false });
+
+// Fenster verschieben (Titelleiste) und skalieren (Ecke unten rechts): liegt immer über dem Editor und fängt alle Berührungen selbst ab
+const pvEl = $('pv');
+function pvClamp() { const A = $('app'), aw = A.clientWidth, ah = A.clientHeight; let w = pvEl.offsetWidth, h = pvEl.offsetHeight; w = Math.min(w, aw - 8); h = Math.min(h, ah - 8); pvEl.style.width = w + 'px'; pvEl.style.height = h + 'px'; const l = Math.max(0, Math.min(aw - w, pvEl.offsetLeft)), t = Math.max(0, Math.min(ah - h, pvEl.offsetTop)); pvEl.style.left = l + 'px'; pvEl.style.top = t + 'px'; pvEl.style.right = 'auto'; }
+function pvSave() { try { localStorage.setItem('zd_form_pv', JSON.stringify({ l: pvEl.offsetLeft, t: pvEl.offsetTop, w: pvEl.offsetWidth, h: pvEl.offsetHeight })); } catch (e) {} }
+try { const o = JSON.parse(localStorage.getItem('zd_form_pv') || 'null'); if (o) { pvEl.style.left = o.l + 'px'; pvEl.style.top = o.t + 'px'; pvEl.style.right = 'auto'; pvEl.style.width = o.w + 'px'; pvEl.style.height = o.h + 'px'; } } catch (e) {}
+const rotD = (dx, dy) => rot === 90 ? [dy, -dx] : rot === -90 ? [-dy, dx] : [dx, dy];
+function pvHandle(el, kind) {
+  let st = null;
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); st = { x: e.clientX, y: e.clientY, l: pvEl.offsetLeft, t: pvEl.offsetTop, w: pvEl.offsetWidth, h: pvEl.offsetHeight }; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', (e) => { if (!st) return; e.stopPropagation(); const [dx, dy] = rotD(e.clientX - st.x, e.clientY - st.y); if (kind === 'move') { pvEl.style.left = (st.l + dx) + 'px'; pvEl.style.top = (st.t + dy) + 'px'; pvEl.style.right = 'auto'; } else { pvEl.style.width = Math.max(110, st.w + dx) + 'px'; pvEl.style.height = Math.max(150, st.h + dy) + 'px'; } pvClamp(); if (kind !== 'move') pvResize(); });
+  const end = (e) => { if (!st) return; st = null; e.stopPropagation(); pvClamp(); pvSave(); pvResize(); };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+pvHandle($('pvtitle'), 'move'); pvHandle($('pvsize'), 'size');
+for (const t of ['pointerdown', 'pointermove', 'pointerup', 'click', 'wheel', 'touchstart', 'touchmove']) pvEl.addEventListener(t, (e) => e.stopPropagation(), { passive: t.startsWith('touch') || t === 'wheel' ? false : undefined });
+setMode('bone'); resize(); pvClamp(); pvResize(); fitView();
 post({ zdForm: 'ready' });
 </script>
 </body>
