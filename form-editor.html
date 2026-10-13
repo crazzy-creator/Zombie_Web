@@ -153,6 +153,7 @@ const topQ = new URLSearchParams(location.search).get('top');
 if (topQ) document.documentElement.style.setProperty('--top', Math.max(0, +topQ || 0) + 'px');
 if (EMB) $('close').style.display = '';
 const KINDS = [['zombie', 'Zombie'], ['fat', 'Fetter Zombie'], ['alien', 'Alien'], ['robot', 'Roboter']];
+let GS = {};   // nur im Spiel: Größenfaktor je Arm/Bein (Editor bleibt)
 let MS = {};   // Netzfeinheit je Teil (Faktor, Standard 1)
 let TG = {};   // Reißfestigkeit je Teil (Faktor, Standard 1)
 let selJoint = null, hoverJoint = null;
@@ -275,7 +276,7 @@ async function setInfo(msg) {
   if (msg.native) $('rotLbl').style.display = 'none';
   info = msg.info; saved = msg.saved || {}; BN = {}; NAMES = info.bones.map((b) => b.name); for (const b of info.bones) BN[b.name] = b;
   work = {}; for (const [p] of PARTS) work[p] = info.cur[p].map((q) => q.slice());
-  T = {}; TF = {}; FL = new Set(msg.custom && msg.custom.flip || []); JO = msg.custom && msg.custom.jointOff ? JSON.parse(JSON.stringify(msg.custom.jointOff)) : {}; ZZ = msg.custom && msg.custom.z ? { ...msg.custom.z } : null; GO = msg.custom && msg.custom.gameOff ? JSON.parse(JSON.stringify(msg.custom.gameOff)) : {}; BL = msg.custom && msg.custom.blend || 0; MS = msg.custom && msg.custom.mesh ? { ...msg.custom.mesh } : {}; TG = msg.custom && msg.custom.tough ? { ...msg.custom.tough } : {}; const cust = msg.custom;
+  T = {}; TF = {}; FL = new Set(msg.custom && msg.custom.flip || []); JO = msg.custom && msg.custom.jointOff ? JSON.parse(JSON.stringify(msg.custom.jointOff)) : {}; ZZ = msg.custom && msg.custom.z ? { ...msg.custom.z } : null; GO = msg.custom && msg.custom.gameOff ? JSON.parse(JSON.stringify(msg.custom.gameOff)) : {}; BL = msg.custom && msg.custom.blend || 0; GS = msg.custom && msg.custom.gameScale ? { ...msg.custom.gameScale } : {}; MS = msg.custom && msg.custom.mesh ? { ...msg.custom.mesh } : {}; TG = msg.custom && msg.custom.tough ? { ...msg.custom.tough } : {}; const cust = msg.custom;
   if (cust) for (const k in cust.bones || {}) T[k] = tFrom(cust.bones[k]);
   if (cust) for (const k in cust.fingers || {}) if (BN[k]) T[k] = tFrom(cust.fingers[k]);
   O = {}; if (cust) for (const k in cust.organs || {}) O[k] = cust.organs[k].slice();
@@ -325,13 +326,14 @@ function currentData() {
   if (ZZ) data.z = { ...ZZ };
   if (Object.keys(GO).length) data.gameOff = JSON.parse(JSON.stringify(GO));
   if (BL > 0) data.blend = BL;
+  if (Object.keys(GS).length) data.gameScale = { ...GS };
   if (Object.keys(MS).length) data.mesh = { ...MS };
   if (Object.keys(TG).length) data.tough = { ...TG };
   if (Object.keys(JO).length) data.jointOff = Object.fromEntries(Object.entries(JO).map(([k, v]) => [k, [Math.round(v[0] * 100) / 100, Math.round(v[1] * 100) / 100]]));
   for (const k in links) { const l = links[k]; if (!l.off.size && !l.on.size) continue; data.links[k] = { off: [...l.off].map((i) => [info.verts[i].x, info.verts[i].y]), on: [...l.on].map((i) => [info.verts[i].x, info.verts[i].y]) }; }
   return data;
 }
-function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length && !Object.keys(d.fingers || {}).length && !(d.flip || []).length && !Object.keys(d.jointOff || {}).length && !d.z && !Object.keys(d.gameOff || {}).length && !(d.blend > 0) && !Object.keys(d.mesh || {}).length && !Object.keys(d.tough || {}).length; }
+function isEmpty(d) { return !Object.keys(d.outlines).length && !Object.keys(d.bones).length && !Object.keys(d.links).length && !Object.keys(d.organs || {}).length && !Object.keys(d.fingers || {}).length && !(d.flip || []).length && !Object.keys(d.jointOff || {}).length && !d.z && !Object.keys(d.gameOff || {}).length && !(d.blend > 0) && !Object.keys(d.gameScale || {}).length && !Object.keys(d.mesh || {}).length && !Object.keys(d.tough || {}).length; }
 let draftTimer = 0;
 function fingerData() { const o = {}; for (const k in T) if (BN[k] && BN[k].editorOnly && hasT(T[k])) o[k] = T[k].map((v) => Math.round(v * 1000) / 1000); return o; }
 function saveDraft() { schedulePreview(); scheduleMesh(); if (!info) return; clearTimeout(draftTimer); draftTimer = setTimeout(() => { try { const all = JSON.parse(localStorage.getItem(DRAFT) || '{}'); const d = currentData(); d.fit = TF; if (isEmpty(d)) delete all[info.kind]; else all[info.kind] = { data: d, savedAt: Date.now() }; localStorage.setItem(DRAFT, JSON.stringify(all)); } catch (e) {} }, 300); }
@@ -342,7 +344,7 @@ function applyDraft(d) {
   T = {}; for (const k in d.bones || {}) if (BN[k]) T[k] = tFrom(d.bones[k]);
   for (const k in d.fingers || {}) if (BN[k]) T[k] = tFrom(d.fingers[k]);
   O = {}; for (const k in d.organs || {}) O[k] = d.organs[k].slice();
-  FL = new Set(d.flip || []); JO = d.jointOff ? JSON.parse(JSON.stringify(d.jointOff)) : {}; ZZ = d.z ? { ...d.z } : null; GO = d.gameOff ? JSON.parse(JSON.stringify(d.gameOff)) : {}; BL = d.blend || 0; MS = d.mesh ? { ...d.mesh } : {}; TG = d.tough ? { ...d.tough } : {}; links = linksFrom(d.links); if (d.fit) TF = d.fit; else baseline();
+  FL = new Set(d.flip || []); JO = d.jointOff ? JSON.parse(JSON.stringify(d.jointOff)) : {}; ZZ = d.z ? { ...d.z } : null; GO = d.gameOff ? JSON.parse(JSON.stringify(d.gameOff)) : {}; BL = d.blend || 0; GS = d.gameScale ? { ...d.gameScale } : {}; MS = d.mesh ? { ...d.mesh } : {}; TG = d.tough ? { ...d.tough } : {}; links = linksFrom(d.links); if (d.fit) TF = d.fit; else baseline();
 }
 
 // ---------- Rückgängig / Wiederholen ----------
@@ -394,8 +396,8 @@ function fitOutlines() {
   dirty = true; skinCache = null; return n;
 }
 
-const snap = () => JSON.stringify({ w: work, t: T, f: TF, fl: [...FL], jo: JO, zz: ZZ, go: GO, bl: BL, ms: MS, tg: TG, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
-function restore(s) { clearSel(); const o = JSON.parse(s); work = o.w; T = o.t; TF = o.f || {}; FL = new Set(o.fl || []); JO = o.jo || {}; ZZ = o.zz || null; GO = o.go || {}; BL = o.bl || 0; MS = o.ms || {}; TG = o.tg || {}; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
+const snap = () => JSON.stringify({ w: work, t: T, f: TF, fl: [...FL], jo: JO, zz: ZZ, go: GO, bl: BL, ms: MS, tg: TG, gs: GS, o: O, l: Object.fromEntries(Object.entries(links).map(([k, v]) => [k, { off: [...v.off], on: [...v.on] }])) });
+function restore(s) { clearSel(); const o = JSON.parse(s); work = o.w; T = o.t; TF = o.f || {}; FL = new Set(o.fl || []); JO = o.jo || {}; ZZ = o.zz || null; GO = o.go || {}; BL = o.bl || 0; MS = o.ms || {}; TG = o.tg || {}; GS = o.gs || {}; O = o.o || {}; links = {}; for (const k in o.l) links[k] = { off: new Set(o.l[k].off), on: new Set(o.l[k].on) }; dirty = true; saveDraft(); draw(); }
 function pushUndo() { const s = snap(); if (undoStack[undoStack.length - 1] !== s) { undoStack.push(s); if (undoStack.length > 60) undoStack.shift(); } redoStack = []; }
 function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); }
 function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); }
@@ -473,6 +475,7 @@ function polySelfCross(poly) { const n = poly.length; const cr = (a, b, c) => (b
 const LIMB = /^(oberarm|unterarm|oberschenkel|schienbein|schaedel|becken)/;
 // ---------- Figuren-Check: Gliedmaßen-Proportionen und Passung Umriss ↔ Knochen ----------
 const CHAINS = { 'Bein vorn': ['oberschenkelN', 'schienbeinN', 'fussN'], 'Bein hinten': ['oberschenkelF', 'schienbeinF', 'fussF'], 'Arm vorn': ['oberarmN', 'unterarmN', 'handN'], 'Arm hinten': ['oberarmF', 'unterarmF', 'handF'] };
+const CHAIN_PART = { 'Bein vorn': 'beinN', 'Bein hinten': 'beinF', 'Arm vorn': 'armN', 'Arm hinten': 'armF' };
 const PAIRS = [['Bein vorn', 'Bein hinten'], ['Arm vorn', 'Arm hinten']];
 const chainOk = (c) => c.every((n) => BN[n]);
 function boneEnds(n) { const b = BN[n]; return b.core.map((q) => bp(b, q[0], q[1])); }
@@ -610,7 +613,8 @@ function renderMeas() {
   let h = `<b>Maße – ${LIMB_OF[part]}</b> <button id="measClose">Schließen</button>`;
   [0, 1].forEach((i) => { h += `<div class="m">${nm[i]}: <button data-seg="${i}:-1">−1</button><button data-seg="${i}:-0.5">−0,5</button><input type="number" step="0.1" min="3" id="segv${i}" value="${L[i].toFixed(1)}"> cm <button data-seg="${i}:0.5">+0,5</button><button data-seg="${i}:1">+1</button></div>`; });
   h += `<div class="m">Gesamtlänge: ${(L[0] + L[1]).toFixed(1)} cm (ohne ${nm[2]})</div>`;
-  h += `<div class="m">Ganzes Glied: <button data-sz="0.95">−5 %</button><button data-sz="0.99">−1 %</button><button data-sz="1.01">+1 %</button><button data-sz="1.05">+5 %</button> <span class="hint">Größe um ${nm[0] === 'Oberarm' ? 'die Schulter' : 'die Hüfte'}</span></div>`;
+  h += `<div class="m">Größe nur im Spiel: <button data-gs="0.95">−5 %</button><button data-gs="0.99">−1 %</button><button data-gs="1.01">+1 %</button><button data-gs="1.05">+5 %</button><button data-gs="0">auf 100 %</button> <b>${Math.round((GS[part] || 1) * 100)} %</b> <span class="hint">um ${nm[0] === 'Oberarm' ? 'die Schulter' : 'die Hüfte'}; der Editor bleibt unverändert</span></div>`;
+  h += `<div class="m hint">Die Längen oben ändern dagegen die Knochen im Editor selbst.</div>`;
   h += `<div class="m">Verschieben (0,5 cm): <button data-mv="0:-1">▲</button><button data-mv="0:1">▼</button><button data-mv="-1:0">◀</button><button data-mv="1:0">▶</button> <span class="hint">das ganze Glied samt ${nm[2]}</span></div>`;
   h += `<div class="m"><label><input id="measFollow" type="checkbox" ${followOutline ? 'checked' : ''}> Umriss folgt</label></div>`;
   if (si) { const dev = Math.abs(si.r - 1) * 100; h += `<div class="m ${dev > 4 ? 'warn' : ''}" style="color:${dev > 4 ? '#ffd37a' : '#8aff9a'}">Bild-Maßstab dieses Teils: ${(si.r * 100).toFixed(0)} % des Rumpf-Maßstabs ${dev > 4 ? `– das Glied ist dadurch ca. ${dev.toFixed(0)} % ${si.r < 1 ? 'zu lang' : 'zu kurz'}` : '– passt'} ${dev > 4 ? '<button id="measScale">Auf Rumpf-Maßstab umrechnen</button>' : ''}</div>`; }
@@ -621,7 +625,7 @@ function renderMeas() {
   const guard = () => { if (isDone(part)) { flashLocked(); return true; } return false; };
   box.querySelectorAll('button[data-seg]').forEach((bt) => { bt.onclick = () => { if (guard()) return; const [i, d] = bt.dataset.seg.split(':').map(Number); const ks = [1, 1]; ks[i] = Math.max(0.2, (boneLen(c[i]) + d) / boneLen(c[i])); pushUndo(); scaleChain(c, ks); limbAfter(); }; });
   [0, 1].forEach((i) => { $('segv' + i).onchange = () => { if (guard()) return; const v = +$('segv' + i).value; if (!(v > 2)) return; const ks = [1, 1]; ks[i] = v / boneLen(c[i]); pushUndo(); scaleChain(c, ks); limbAfter(); }; });
-  box.querySelectorAll('button[data-sz]').forEach((bt) => { bt.onclick = () => { if (guard()) return; pushUndo(); rescalePart(part, +bt.dataset.sz, limbRoot(c)); limbAfter(); }; });
+  box.querySelectorAll('button[data-gs]').forEach((bt) => { bt.onclick = () => { if (guard()) return; pushUndo(); const k = +bt.dataset.gs; if (!k) delete GS[part]; else { const v = Math.max(0.5, Math.min(1.8, (GS[part] || 1) * k)); if (Math.abs(v - 1) < 0.003) delete GS[part]; else GS[part] = Math.round(v * 1000) / 1000; } changed(); renderMeas(); }; });
   box.querySelectorAll('button[data-mv]').forEach((bt) => { bt.onclick = () => { if (guard()) return; const [dx, dy] = bt.dataset.mv.split(':').map(Number); pushUndo(); for (const m of subtree(c[0])) moveBody(m, 0, 1, [0, 0], [dx * 0.5, dy * 0.5]); if (followOutline) work[part] = work[part].map(([x, y]) => [x + dx * 0.5, y + dy * 0.5]); TF[part] = cloneT(); changed(); renderMeas(); }; });
   if (si && $('measScale')) $('measScale').onclick = () => { if (guard()) return; pushUndo(); rescalePart(part, si.r, limbRoot(c)); si.a.s = si.a.s / si.r; if (si.a.s0) si.a.s0 = si.a.s0 / si.r; saveRef(); changed(); renderMeas(); };
 }
@@ -696,14 +700,15 @@ function fitPartFromBase(part) { work[part] = info.base[part].map((q) => q.slice
 function limbProblems(issues) {
   for (const [a, b] of PAIRS) {
     const ca = CHAINS[a], cb = CHAINS[b]; if (!chainOk(ca) || !chainOk(cb)) continue;
-    const la = chainLen(ca), lb = chainLen(cb), d = Math.abs(la - lb);
+    const pa = CHAIN_PART[a], pb = CHAIN_PART[b], la = chainLen(ca) * (GS[pa] || 1), lb = chainLen(cb) * (GS[pb] || 1), d = Math.abs(la - lb);
     if (d / Math.max(la, lb) < 0.03) continue;
     const [longN, shortN, lc, sc, ll, ls] = la > lb ? [a, b, ca, cb, la, lb] : [b, a, cb, ca, lb, la];
-    const apply = (fn) => () => { fn(); fitOutlines(); };
-    issues.push({ lvl: 'warn', fix: null, part: null, text: `${longN} ist ${d.toFixed(1)} cm (${((d / ls) * 100).toFixed(0)} %) länger als ${shortN} (Ober- + Unterteil: ${ll.toFixed(1)} gegen ${ls.toFixed(1)} cm)`, acts: [
-      { label: `${longN} kürzen`, run: apply(() => scaleChain(lc, ls / ll)) },
-      { label: `${shortN} verlängern`, run: apply(() => scaleChain(sc, ll / ls)) },
-      { label: 'Mittelwert', run: apply(() => { const m = (ll + ls) / 2; scaleChain(lc, m / ll); scaleChain(sc, m / ls); }) },
+    const gsMul = (part, k) => { const v = Math.max(0.5, Math.min(1.8, (GS[part] || 1) * k)); if (Math.abs(v - 1) < 0.003) delete GS[part]; else GS[part] = Math.round(v * 1000) / 1000; };
+    const [lp, sp] = la > lb ? [pa, pb] : [pb, pa];
+    issues.push({ lvl: 'warn', fix: null, part: null, text: `${longN} ist ${d.toFixed(1)} cm (${((d / ls) * 100).toFixed(0)} %) länger als ${shortN} (Ober- + Unterteil im Spiel: ${ll.toFixed(1)} gegen ${ls.toFixed(1)} cm) – die Korrektur gilt nur im Spiel, der Editor bleibt`, acts: [
+      { label: `${longN} im Spiel kürzen`, run: () => gsMul(lp, ls / ll) },
+      { label: `${shortN} im Spiel verlängern`, run: () => gsMul(sp, ll / ls) },
+      { label: 'Mittelwert (nur Spiel)', run: () => { const m = (ll + ls) / 2; gsMul(lp, m / ll); gsMul(sp, m / ls); } },
     ] });
   }
   for (const [p, label] of PARTS) {
@@ -758,7 +763,7 @@ function testText() {
   if (!testRes) return '';
   if (testRes.error) return '⚠ Test nicht möglich';
   const r = testRes, bad = r.tearCount || r.deadJoints.length || r.holes.length > 150;
-  return `${bad ? '⚠' : '✔'} Spieltest (${(r.frames / 60).toFixed(0)} s): ${r.tearCount} gerissene Hautkanten, ${r.deadJoints.length ? 'Gelenke gerissen: ' + r.deadJoints.join(', ') : 'alle Gelenke halten'}, ${r.holes.length} Löcher im Hautnetz${bad && r.tearCount ? ' (rote Kreuze im Bild)' : ''}`;
+  return `${bad ? '⚠' : '✔'} Spieltest (${(r.frames / 60).toFixed(0)} s): ${r.tearCount} gerissene Hautkanten, ${r.deadJoints.length ? 'Gelenke gerissen: ' + r.deadJoints.join(', ') : 'alle Gelenke halten'}, ${r.holes.length} Lücken im Hautnetz (orange Quadrate, keine Risse)${r.tearCount ? ' – rote Kreuze = gerissene Haut' : ''}`;
 }
 function runGameTest() { if (!info || !EMB || testBusy) return; testBusy = true; testId++; testRes = null; if ($('testRes')) $('testRes').textContent = testText(); post({ zdForm: 'test', id: testId, kind: info.kind, data: currentData() }); setTimeout(() => { if (testBusy) { testBusy = false; testRes = { error: 1 }; if ($('testRes')) $('testRes').textContent = testText(); } }, 20000); }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormTest || !info || d.kind !== info.kind || d.id !== testId) return; testBusy = false; testRes = d.res || { error: 1 }; if ($('testRes')) $('testRes').textContent = testText(); draw(); });
@@ -1081,7 +1086,7 @@ $('undo').onclick = undo; $('redo').onclick = redo;
 window.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); } });
 $('check').onclick = () => { if (info) showCheck(); };
 $('resetPart').onclick = () => { if (curDone()) return flashLocked(); pushUndo(); const p = $('part').value; work[p] = info.base[p].map((q) => q.slice()); changed(); };
-$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; TF = {}; FL = new Set(); JO = {}; ZZ = null; GO = {}; BL = 0; MS = {}; TG = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
+$('resetAll').onclick = () => { pushUndo(); for (const [p] of PARTS) work[p] = info.base[p].map((q) => q.slice()); T = {}; TF = {}; FL = new Set(); JO = {}; ZZ = null; GO = {}; BL = 0; MS = {}; TG = {}; GS = {}; links = {}; O = {}; clearDraft(info.kind); resetSkins = true; changed(); };
 $('resetBones').onclick = () => { pushUndo(); T = {}; sel = null; changed(); };
 $('resetLinks').onclick = () => { pushUndo(); if (sel) delete links[sel]; else links = {}; changed(); };
 let resetSkins = false;
