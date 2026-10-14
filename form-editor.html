@@ -1074,10 +1074,24 @@ async function showCarpet() {
 }
 $('carpetOut').onclick = () => { carpetOut = !carpetOut; showCarpet(); };
 function boneUi() { $('boneInfo').textContent = boneAtlas ? `Teppich: ${boneAtlas.src === 'bild' ? 'aus Knochen-Bild' : boneAtlas.src === 'import' ? 'importiert' : 'Zeichnung'} (${Object.keys(boneAtlas.layout.bones).length} Knochen)` : 'Noch kein Knochen-Bild.'; $('fleshInfo').textContent = fleshRef ? 'Fleisch-Bild geladen.' : 'Noch kein Fleisch-Bild.'; }
-$('boneFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await readImageFile(f); if (!r) return; boneRef = r.img; boneRefData = r.dataUrl; boneRemoved = false; layerVer++; const n = await buildBoneAtlas(true); draftNote = n ? `Knochen-Bild geladen: ${n.fromImg} von ${n.n} Knochen aus dem Bild${n.vec ? `, ${n.vec} ohne Ausrichtung (Zeichnung)` : ''}. „Übernehmen“ legt es fest. ` : ''; saveLayers(); boneUi(); draw(); };
+$('boneFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  const dataUrl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(f); });
+  const raw = await loadImgUrl(dataUrl); if (!raw) { draftNote = '⚠ Das Bild konnte nicht gelesen werden. '; draw(); return; }
+  // Erkennen: Teppich-Bild (alle Knochen einzeln, Seitenverhältnis wie der Teppich dieser Figur) oder Foto, das zum Referenzbild passt?
+  const bi = await askBoneInfo(), local = bi ? atlasLayout(bi) : null, ia = raw.width / raw.height;
+  const isCarpet = !!local && Math.abs(ia / (local.W / local.H) - 1) < 0.02, isRef = !!ref && Math.abs(ia / (ref.width / ref.height) - 1) < 0.02;
+  let asCarpet = isCarpet && !isRef;
+  if (isCarpet && isRef) asCarpet = confirm('Ist das ein Teppich-Bild (alle Knochen einzeln ausgelegt, so wie aus „Drucken“)?\n\nOK = Teppich\nAbbrechen = Foto, das zum Referenzbild passt');
+  if (asCarpet) { await importCarpet(dataUrl, raw, null); return; }
+  if (!ref) { draftNote = '⚠ Kein Referenzbild geladen – ein Teppich-Bild passt nicht zu dieser Figur (Seitenverhältnis). Lade zuerst das Referenzbild (Menü) oder nimm ein Teppich-Bild aus „Drucken“. '; draw(); return; }
+  const r = await readImageFile(f); if (!r) return; boneRef = r.img; boneRefData = r.dataUrl; boneRemoved = false; layerVer++;
+  const n = await buildBoneAtlas(true); const skew = Math.abs(ia / (ref.width / ref.height) - 1) > 0.02;
+  draftNote = (n ? `Foto geladen: ${n.fromImg} von ${n.n} Knochen aus dem Bild geschnitten${n.vec ? `, ${n.vec} ohne Ausrichtung (Zeichnung)` : ''}. ` : '') + (skew ? '⚠ Das Bild hat ein anderes Seitenverhältnis als dein Referenzbild und wird gestreckt eingepasst. Ist es ein Teppich-Bild? Dann „Importieren (Bild + Layout)“ nehmen. ' : '„Übernehmen“ legt es fest. '); saveLayers(); boneUi(); draw();
+};
 $('boneFromImg').onclick = async () => { if (!boneRef) { draftNote = 'Zuerst ein Knochen-Bild laden. '; draw(); return; } const n = await buildBoneAtlas(true); if (n) draftNote = `Neu aus dem Bild: ${n.fromImg} von ${n.n} Knochen. `; boneUi(); draw(); };
 $('boneRm').onclick = () => { boneRef = null; boneRefData = null; boneAtlas = null; boneRemoved = true; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Knochen-Bild entfernt (Spiel nutzt wieder die Zeichnung, sobald du „Übernehmen“ drückst). '; draw(); };
-$('boneSpread').onclick = async () => { if (boneAtlas && boneAtlas.src === 'import' && !confirm('Der importierte Teppich wird durch eine neue Aufteilung ersetzt. Fortfahren?')) return; const n = await buildBoneAtlas(!!boneRef); if (n) { draftNote = `Proportional verteilt: ${n.n} Knochen. `; showCarpet(); } boneUi(); draw(); };
+$('boneSpread').onclick = async () => { if (boneAtlas && (boneAtlas.src === 'import' || boneAtlas.src === 'angepasst')) { draftNote = 'Dein Teppich ist schon proportional ausgelegt – hier ist er (türkis = Flächen der Knochen). '; draw(); showCarpet(); return; } const n = await buildBoneAtlas(!!boneRef); if (n) { draftNote = `Proportional verteilt: ${n.n} Knochen. `; showCarpet(); } boneUi(); draw(); };
 $('bonePrint').onclick = async () => { if (!boneAtlas) { const n = await buildBoneAtlas(!!boneRef); if (!n) return; } showCarpet(); await saveOut(`knochen-teppich-${info.kind}.png`, dataUrlBlob(boneAtlas.dataUrl), 'image/png'); await saveOut(`knochen-teppich-${info.kind}.json`, JSON.stringify(boneAtlas.layout), 'application/json'); boneUi(); };
 $('boneLayout').onclick = async () => { if (!boneAtlas) { const n = await buildBoneAtlas(!!boneRef); if (!n) return; } await saveOut(`knochen-teppich-${info.kind}.json`, JSON.stringify(boneAtlas.layout), 'application/json'); };
 // Vektor-Teppich: die Zeichnung der Knochen (Flächen + Umrisse) zum Nachzeichnen/Texturieren; ändert den aktuellen Teppich/die Textur NICHT
@@ -1091,22 +1105,36 @@ async function printVector() {
 }
 $('boneVec').onclick = printVector; $('carpetVec').onclick = printVector;
 $('carpetPng').onclick = () => $('bonePrint').onclick(); $('carpetJson').onclick = () => $('boneLayout').onclick(); $('carpetClose').onclick = () => $('carpet').classList.remove('open');
+// Passt ein gespeichertes Layout zur aktuellen Figur? (lokale Boxen der Knochen stimmen auf ~0,5 cm überein)
+function layoutMatches(L, bi) {
+  if (!L || !L.bones) return false; let ok = 0, n = 0;
+  for (const b of bi) { n++; const R = L.bones[b.name]; if (!R) continue; const odd = (R.r || 0) % 2 === 1, bw = b.box[2] - b.box[0] + 2 * ATLAS_PAD, bh = b.box[3] - b.box[1] + 2 * ATLAS_PAD; if (Math.abs(R.bx - (b.box[0] - ATLAS_PAD)) < 0.5 && Math.abs(R.by - (b.box[1] - ATLAS_PAD)) < 0.5 && Math.abs(R.bw - bw) < 0.8 && Math.abs(R.bh - bh) < 0.8) ok++; void odd; }
+  return n > 0 && ok >= 0.9 * n;
+}
+async function applyImportedAtlas(dataUrl, im, layout, how) {
+  boneAtlas = { dataUrl, layout, src: 'import', img: im }; boneAtlas.small = await shrinkDataUrl(dataUrl); boneRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi();
+  draftNote = `Teppich geladen (${Object.keys(layout.bones).length} Knochen${how ? ', ' + how : ''}). Prüfe im Fenster, ob die Textur in den türkisen Flächen liegt – wenn nicht: „Automatisch anpassen“. „Übernehmen“ legt sie fest. `; draw(); showCarpet();
+}
+// Teppich-Bild (alle Knochen einzeln ausgelegt) laden; Layout aus Datei (JSON) oder – passt das Seitenverhältnis – frisch aus der aktuellen Figur berechnet
+async function importCarpet(dataUrl, im, jsonLayout) {
+  const bi = await askBoneInfo(); const local = bi ? atlasLayout(bi) : null;
+  let layout = null, how = '';
+  if (jsonLayout && jsonLayout.bones && (!bi || layoutMatches(jsonLayout, bi))) { layout = jsonLayout; how = 'Layout aus Datei'; }
+  else if (local && Math.abs(im.width / im.height / (local.W / local.H) - 1) < 0.015) { layout = local; how = jsonLayout ? 'Layout-Datei passte nicht zur Figur – Layout neu berechnet' : 'Layout aus der aktuellen Figur berechnet'; }
+  else if (jsonLayout && jsonLayout.bones) { layout = jsonLayout; how = '⚠ Layout-Datei passt nicht genau zur Figur'; }
+  if (!layout) { draftNote = '⚠ Das Bild passt nicht zum Teppich dieser Figur (Seitenverhältnis). Entweder ein Teppich-Bild aus „Drucken“ verwenden (nicht beschneiden) oder die Layout-Datei (JSON) mit auswählen. '; draw(); return false; }
+  if (layout.kind && layout.kind !== info.kind) { draftNote = `⚠ Das Layout gehört zur Figur „${layout.kind}“. `; draw(); return false; }
+  if (Math.abs(im.width / layout.W - im.height / layout.H) / (im.width / layout.W) > 0.015) { draftNote = '⚠ Bildformat passt nicht zum Layout (Seitenverhältnis). Nicht beschneiden oder strecken. '; draw(); return false; }
+  await applyImportedAtlas(dataUrl, im, layout, how); return true;
+}
 $('boneImp').onchange = async (e) => {
   const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
   const png = files.find((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp)$/i.test(f.name)), js = files.find((f) => /json/.test(f.type) || /\.json$/i.test(f.name));
   if (!png) { draftNote = '⚠ Bitte das bemalte Teppich-Bild (PNG) mit auswählen, am besten zusammen mit der Layout-Datei (JSON). '; draw(); return; }
   const dataUrl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(png); });
   const im = await loadImgUrl(dataUrl); if (!im) { draftNote = '⚠ Das Bild konnte nicht gelesen werden. '; draw(); return; }
-  let layout = null;
-  if (js) { try { layout = JSON.parse(await js.text()); } catch (er) { layout = null; } }
-  if (!layout || !layout.bones) {
-    const bi = await askBoneInfo(); if (bi) { const l = atlasLayout(bi); if (l.W === im.width && l.H === im.height) layout = l; }
-    if (!layout) { draftNote = '⚠ Layout-Datei (JSON) fehlt oder passt nicht zur Figur. Bitte zusammen mit dem Bild importieren. '; draw(); return; }
-  }
-  const sx = im.width / layout.W, sy = im.height / layout.H;   // erlaubt anderes Auflösungsmaß (z. B. doppelt so groß bemalt)
-  if (Math.abs(sx - sy) > 0.01) { draftNote = '⚠ Bildformat passt nicht zum Layout (Seitenverhältnis). Nicht beschneiden oder strecken. '; draw(); return; }
-  if (layout.kind && layout.kind !== info.kind) { draftNote = `⚠ Das Layout gehört zur Figur „${layout.kind}“. `; draw(); return; }
-  boneAtlas = { dataUrl, layout, src: 'import', img: im }; boneAtlas.small = await shrinkDataUrl(dataUrl); boneRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = `Teppich importiert (${Object.keys(layout.bones).length} Knochen). Prüfe im Fenster, ob die Textur in den türkisen Flächen liegt; „Übernehmen“ legt sie fest. `; draw(); showCarpet();
+  let layout = null; if (js) { try { layout = JSON.parse(await js.text()); } catch (er) { layout = null; } }
+  await importCarpet(dataUrl, im, layout);
 };
 $('fleshFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await readImageFile(f); if (!r) return; fleshRef = r.img; fleshRefData = r.dataUrl; fleshRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Fleisch-Bild geladen (gleiche Ausrichtung wie das Referenzbild). „Übernehmen“ legt es fest. '; draw(); };
 $('fleshRm').onclick = () => { fleshRef = null; fleshRefData = null; fleshRemoved = true; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Fleisch-Bild entfernt. '; draw(); };
@@ -1134,7 +1162,7 @@ function path(poly) { c.beginPath(); poly.forEach(([x, y], i) => { const [sx, sy
 const depthOf = (n) => { let d = 0, b = BN[n]; while (b && b.parent) { d++; b = BN[b.parent]; } return d; };
 function paint() {
   c.setTransform(dpr, 0, 0, dpr, 0, 0); c.fillStyle = '#0c0909'; c.fillRect(0, 0, cw, ch);
-  if (ref) { const under = mode === 'tbone' && boneRef ? boneRef : mode === 'tflesh' && fleshRef ? fleshRef : ref; c.globalAlpha = +$('alpha').value; c.drawImage(under, view.px, view.py, ref.width * view.z, ref.height * view.z); c.globalAlpha = 1; }
+  if (ref) { const under = mode === 'tbone' && boneRef ? boneRef : mode === 'tflesh' && fleshRef ? fleshRef : ref; const ku = Math.abs(under.width / under.height / (ref.width / ref.height) - 1) < 0.02 ? [ref.width, ref.height] : (() => { const k = Math.min(ref.width / under.width, ref.height / under.height); return [under.width * k, under.height * k]; })(); c.globalAlpha = +$('alpha').value; c.drawImage(under, view.px, view.py, ku[0] * view.z, ku[1] * view.z); c.globalAlpha = 1; }
   if (!info) { c.fillStyle = '#6a5a5a'; c.font = '15px system-ui'; c.textAlign = 'center'; c.fillText('Lädt …', cw / 2, ch / 2); return; }
   const part = $('part').value, solo = $('solo').checked;
   if ($('showSkin').checked && ref) {
