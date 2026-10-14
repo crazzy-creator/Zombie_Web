@@ -85,6 +85,7 @@
         <button id="boneRm">Bild entfernen</button>
         <button id="boneSpread" class="main">Proportional auf die Bildfläche verteilen</button>
         <button id="bonePrint">Drucken (PNG + Layout)</button>
+        <button id="boneVec" title="Die Zeichnung der Knochen (Flächen und Umrisse) auf dem Teppich – zum Nachzeichnen und Texturieren. Ändert nichts an deiner Textur.">Vektor drucken (zum Nachzeichnen)</button>
         <button id="boneLayout">Layout (JSON)</button>
         <label class="btn">Importieren (Bild + Layout)<input id="boneImp" type="file" accept="image/*,.json,application/json" multiple style="display:none"></label>
         <span class="hint" id="boneInfo"></span>
@@ -173,7 +174,7 @@
       <span id="alignSliders"><label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
       <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label></span>
     </div>
-    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="carpet"><div class="row"><button id="carpetPng" class="main">Drucken (PNG + Layout)</button><button id="carpetJson">Layout (JSON)</button><button id="carpetClose">Schließen</button><span class="hint" id="carpetInfo"></span></div><div id="carpetWrap"><img id="carpetImg" alt=""></div></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
+    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="carpet"><div class="row"><button id="carpetPng" class="main">Drucken (PNG + Layout)</button><button id="carpetJson">Layout (JSON)</button><button id="carpetVec">Vektor drucken (zum Nachzeichnen)</button><button id="carpetClose">Schließen</button><span class="hint" id="carpetInfo"></span></div><div id="carpetWrap"><img id="carpetImg" alt=""></div></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
     <div class="hint" id="status"></div>
   </main>
 <div id="pv"><div id="pvtitle">⠿ Vorschau (ziehen)</div><canvas id="pvc"></canvas><div id="pvsize"></div><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label></div></div></div>
@@ -942,6 +943,8 @@ function drawBoneCrop(g, b, R, ppc, img) {
 function drawBoneVector(g, b, R, ppc) {
   g.save(); g.translate(R.x, R.y);
   for (let layer = 0; layer < 5; layer++) for (const t of b.tris) { if (t[9] !== layer) continue; g.fillStyle = `rgb(${t[6]},${t[7]},${t[8]})`; g.beginPath(); g.moveTo((t[0] - R.bx) * ppc, (t[1] - R.by) * ppc); g.lineTo((t[2] - R.bx) * ppc, (t[3] - R.by) * ppc); g.lineTo((t[4] - R.bx) * ppc, (t[5] - R.by) * ppc); g.closePath(); g.fill(); }
+  g.strokeStyle = 'rgba(30,20,20,.9)'; g.lineCap = 'round';
+  for (const l of b.lines || []) { g.lineWidth = Math.max(1.5, l[4] * ppc / 8); g.beginPath(); g.moveTo((l[0] - R.bx) * ppc, (l[1] - R.by) * ppc); g.lineTo((l[2] - R.bx) * ppc, (l[3] - R.by) * ppc); g.stroke(); }
   g.restore();
 }
 async function buildBoneAtlas(useImage) {
@@ -978,6 +981,16 @@ $('boneRm').onclick = () => { boneRef = null; boneRefData = null; boneAtlas = nu
 $('boneSpread').onclick = async () => { if (boneAtlas && boneAtlas.src === 'import' && !confirm('Der importierte Teppich wird durch eine neue Aufteilung ersetzt. Fortfahren?')) return; const n = await buildBoneAtlas(!!boneRef); if (n) { draftNote = `Proportional verteilt: ${n.n} Knochen. `; showCarpet(); } boneUi(); draw(); };
 $('bonePrint').onclick = async () => { if (!boneAtlas) { const n = await buildBoneAtlas(!!boneRef); if (!n) return; } showCarpet(); await saveOut(`knochen-teppich-${info.kind}.png`, dataUrlBlob(boneAtlas.dataUrl), 'image/png'); await saveOut(`knochen-teppich-${info.kind}.json`, JSON.stringify(boneAtlas.layout), 'application/json'); boneUi(); };
 $('boneLayout').onclick = async () => { if (!boneAtlas) { const n = await buildBoneAtlas(!!boneRef); if (!n) return; } await saveOut(`knochen-teppich-${info.kind}.json`, JSON.stringify(boneAtlas.layout), 'application/json'); };
+// Vektor-Teppich: die Zeichnung der Knochen (Flächen + Umrisse) zum Nachzeichnen/Texturieren; ändert den aktuellen Teppich/die Textur NICHT
+async function printVector() {
+  if (!info) return; const bi = await askBoneInfo(); if (!bi || !bi.length) { draftNote = '⚠ Die Knochenliste kam nicht aus dem Spiel (nur im eingebetteten Editor möglich). '; draw(); return; }
+  const layout = atlasLayout(bi), cvs = document.createElement('canvas'); cvs.width = layout.W; cvs.height = layout.H; const g = cvs.getContext('2d');
+  for (const b of bi) drawBoneVector(g, b, layout.bones[b.name], layout.ppc);
+  const png = await new Promise((res) => cvs.toBlob(res, 'image/png'));
+  await saveOut(`knochen-vektor-${info.kind}.png`, png, 'image/png'); await saveOut(`knochen-vektor-${info.kind}.json`, JSON.stringify(layout), 'application/json');
+  draftNote = `Vektor-Teppich gedruckt (${bi.length} Knochen, ${layout.W}×${layout.H}). Das Layout passt zum Wieder-Importieren; die Textur im Spiel bleibt, wie sie ist. `; draw();
+}
+$('boneVec').onclick = printVector; $('carpetVec').onclick = printVector;
 $('carpetPng').onclick = () => $('bonePrint').onclick(); $('carpetJson').onclick = () => $('boneLayout').onclick(); $('carpetClose').onclick = () => $('carpet').classList.remove('open');
 $('boneImp').onchange = async (e) => {
   const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
