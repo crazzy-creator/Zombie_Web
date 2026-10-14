@@ -39,7 +39,7 @@
   #pvbar button{padding:2px 6px;font-size:11px}
   #ovl{position:absolute;inset:0;background:rgba(10,8,8,.95);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
   #ovl.open{display:flex}
-  #carpet{position:absolute;inset:0;background:rgba(10,8,8,.97);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
+  #carpet{position:absolute;inset:0;background:rgba(10,8,8,.97);display:none;flex-direction:column;gap:8px;padding:12px;z-index:250}
   #carpet.open{display:flex}
   #carpetWrap{flex:1;min-height:0;overflow:auto;background:repeating-conic-gradient(#2a2323 0 25%,#1d1717 0 50%) 0 0/16px 16px;border:1px solid #4a4040;border-radius:8px}
   #carpetCv{display:block;max-width:100%;height:auto;margin:auto}
@@ -87,6 +87,7 @@
         <button id="bonePrint">Drucken (PNG + Layout)</button>
         <button id="boneVec" title="Die Zeichnung der Knochen (Flächen und Umrisse) auf dem Teppich – zum Nachzeichnen und Texturieren. Ändert nichts an deiner Textur.">Vektor drucken (zum Nachzeichnen)</button>
         <button id="boneLayout">Layout (JSON)</button>
+        <button id="boneFit" title="Trennt jeden fotografierten Knochen in deinem Bild heraus und passt ihn in die Fläche seines Knochens ein (strecken/verschieben). Nur Textur – die Knochen bleiben.">Automatisch anpassen</button><button id="boneFitUndo">Anpassung zurück</button>
         <label class="btn">Importieren (Bild + Layout)<input id="boneImp" type="file" accept="image/*,.json,application/json" multiple style="display:none"></label>
         <span class="hint" id="boneInfo"></span>
       </div>
@@ -174,7 +175,7 @@
       <span id="alignSliders"><label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
       <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label></span>
     </div>
-    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="carpet"><div class="row"><button id="carpetPng" class="main">Drucken (PNG + Layout)</button><button id="carpetJson">Layout (JSON)</button><button id="carpetVec">Vektor drucken (zum Nachzeichnen)</button><button id="carpetOut" class="sel" title="Zeigt die Flächen der Knochen (türkis) über dem Bild: nur dort, wo das Bild innerhalb der Flächen liegt, landet die Textur im Spiel">Umrisse prüfen</button><button id="carpetClose">Schließen</button><span class="hint" id="carpetInfo"></span></div><div id="carpetWrap"><canvas id="carpetCv"></canvas></div></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
+    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="carpet"><div class="row"><button id="carpetPng" class="main">Drucken (PNG + Layout)</button><button id="carpetJson">Layout (JSON)</button><button id="carpetVec">Vektor drucken (zum Nachzeichnen)</button><button id="carpetFit" title="Fotografierte Knochen automatisch in die türkisen Flächen einpassen">Automatisch anpassen</button><button id="carpetFitUndo">Anpassung zurück</button><button id="carpetOut" class="sel" title="Zeigt die Flächen der Knochen (türkis) über dem Bild: nur dort, wo das Bild innerhalb der Flächen liegt, landet die Textur im Spiel">Umrisse prüfen</button><button id="carpetClose">Schließen</button><span class="hint" id="carpetInfo"></span></div><div id="carpetWrap"><canvas id="carpetCv"></canvas></div></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
     <div class="hint" id="status"></div>
   </main>
 <div id="pv"><div id="pvtitle">⠿ Vorschau (ziehen)</div><canvas id="pvc"></canvas><div id="pvsize"></div><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label><label title="Haut und Fleisch durchsichtig: Knochen und ihre Textur sehen"><input id="pvX" type="checkbox"> Röntgen</label></div></div></div>
@@ -983,6 +984,69 @@ function saveOut(name, payload, mime) {
   });
 }
 const dataUrlBlob = (u) => { const [h, b] = u.split(','), mime = /:(.*?);/.exec(h)[1], bin = atob(b), n = bin.length, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: mime }); };
+
+// ---------- Automatisch anpassen: fotografierte Knochen in die Flächen der Knochen einpassen (nur Textur, Knochen bleiben) ----------
+async function autoFitAtlas() {
+  if (!boneAtlas || !boneAtlas.img) { draftNote = 'Zuerst einen Teppich importieren. '; draw(); return; }
+  const bi = await askBoneInfo(); if (!bi || !bi.length) { draftNote = '⚠ Die Knochenliste kam nicht aus dem Spiel. '; draw(); return; }
+  const src = boneAtlas.orig || boneAtlas.dataUrl, im0 = boneAtlas.orig ? await loadImgUrl(boneAtlas.orig) : boneAtlas.img, L = boneAtlas.layout;
+  const IW = im0.naturalWidth || im0.width, IH = im0.naturalHeight || im0.height, sx = IW / L.W;
+  const f = Math.min(1, 1400 / Math.max(IW, IH)), SW = Math.round(IW * f), SH = Math.round(IH * f);
+  const sc = document.createElement('canvas'); sc.width = SW; sc.height = SH; const sg = sc.getContext('2d', { willReadFrequently: true }); sg.drawImage(im0, 0, 0, SW, SH);
+  const px = sg.getImageData(0, 0, SW, SH).data, N = SW * SH;
+  // Vordergrund = alles, was nicht (fast) weiß oder durchsichtig ist
+  const fg = new Uint8Array(N);
+  for (let i = 0; i < N; i++) { const r = px[i * 4], g = px[i * 4 + 1], b = px[i * 4 + 2], a = px[i * 4 + 3]; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); fg[i] = a > 40 && !(mn > 226 && mx - mn < 20) ? 1 : 0; }
+  // kleine Lücken schließen (zum Zusammenfassen), dann Zusammenhangskomponenten
+  const dil = new Uint8Array(N); const R2 = 2;
+  for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) { if (!fg[y * SW + x]) continue; for (let dy = -R2; dy <= R2; dy++) { const yy = y + dy; if (yy < 0 || yy >= SH) continue; for (let dx = -R2; dx <= R2; dx++) { const xx = x + dx; if (xx >= 0 && xx < SW) dil[yy * SW + xx] = 1; } } }
+  const comp = new Int32Array(N).fill(-1); let nc = 0; const stack = [];
+  for (let i0 = 0; i0 < N; i0++) { if (!dil[i0] || comp[i0] >= 0) continue; comp[i0] = nc; stack.push(i0); while (stack.length) { const i = stack.pop(), x = i % SW, y = (i / SW) | 0; if (x > 0 && dil[i - 1] && comp[i - 1] < 0) { comp[i - 1] = nc; stack.push(i - 1); } if (x < SW - 1 && dil[i + 1] && comp[i + 1] < 0) { comp[i + 1] = nc; stack.push(i + 1); } if (y > 0 && dil[i - SW] && comp[i - SW] < 0) { comp[i - SW] = nc; stack.push(i - SW); } if (y < SH - 1 && dil[i + SW] && comp[i + SW] < 0) { comp[i + SW] = nc; stack.push(i + SW); } } nc++; }
+  // Zellen des Layouts in Segmentierungs-Pixeln
+  const names = bi.map((b) => b.name), cells = bi.map((b) => { const r = L.bones[b.name]; return r ? [r.x * sx * f, r.y * sx * f, (r.x + r.w) * sx * f, (r.y + r.h) * sx * f] : null; });
+  const cellAt = (x, y) => { let best = -1, ba = 1e18; for (let k = 0; k < cells.length; k++) { const c = cells[k]; if (c && x >= c[0] && x < c[2] && y >= c[1] && y < c[3]) { const a = (c[2] - c[0]) * (c[3] - c[1]); if (a < ba) { ba = a; best = k; } } } return best; };
+  const cnt = Array.from({ length: nc }, () => new Map()), tot = new Int32Array(nc);
+  for (let i = 0; i < N; i++) { if (!fg[i]) continue; const c = comp[i]; if (c < 0) continue; tot[c]++; const k = cellAt(i % SW, (i / SW) | 0); if (k >= 0) cnt[c].set(k, (cnt[c].get(k) || 0) + 1); }
+  const dominant = new Int32Array(nc).fill(-1);
+  for (let c = 0; c < nc; c++) { let bk = -1, bv = 0; for (const [k, v] of cnt[c]) if (v > bv) { bv = v; bk = k; } if (bk >= 0 && bv >= 0.6 * tot[c]) dominant[c] = bk; }
+  const rectDist = (c, x, y) => { const dx = Math.max(c[0] - x, 0, x - c[2]), dy = Math.max(c[1] - y, 0, y - c[3]); return dx * dx + dy * dy; };
+  const cellOf = new Int16Array(N).fill(-1); const bb = cells.map(() => [1e9, 1e9, -1, -1, 0]);
+  for (let i = 0; i < N; i++) {
+    if (!fg[i]) continue; const c = comp[i]; if (c < 0 || tot[c] < 25) continue; const x = i % SW, y = (i / SW) | 0; let k = dominant[c];
+    if (k < 0) { k = cellAt(x, y); if (k < 0) { let bd = 1e18; for (const [kk] of cnt[c]) { const d = rectDist(cells[kk], x, y); if (d < bd) { bd = d; k = kk; } } } }
+    if (k < 0) continue; cellOf[i] = k; const q = bb[k]; if (x < q[0]) q[0] = x; if (y < q[1]) q[1] = y; if (x > q[2]) q[2] = x; if (y > q[3]) q[3] = y; q[4]++;
+  }
+  // Ergebnis: Kopie des Originals, jede Zelle neu aufgebaut
+  const out = document.createElement('canvas'); out.width = IW; out.height = IH; const og = out.getContext('2d'); og.fillStyle = '#fff'; og.fillRect(0, 0, IW, IH); og.drawImage(im0, 0, 0);
+  let fitted = 0, kept = 0;
+  bi.forEach((b, k) => {
+    const R = L.bones[b.name], q = bb[k]; if (!R) return; if (q[4] < 40) { kept++; return; }
+    // Fläche des Knochens in Bildpixeln (Umgrenzung der Dreiecke in der Teppich-Zelle)
+    const m = cellMat(R, L.ppc, R.x, R.y); let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const t of b.tris) for (let v = 0; v < 6; v += 2) { const X = (m[0] * t[v] + m[2] * t[v + 1] + m[4]) * sx, Y = (m[1] * t[v] + m[3] * t[v + 1] + m[5]) * sx; if (X < x0) x0 = X; if (X > x1) x1 = X; if (Y < y0) y0 = Y; if (Y > y1) y1 = Y; }
+    const cx0 = R.x * sx, cy0 = R.y * sx, cx1 = (R.x + R.w) * sx, cy1 = (R.y + R.h) * sx;
+    x0 = Math.max(cx0, x0 - 1); y0 = Math.max(cy0, y0 - 1); x1 = Math.min(cx1, x1 + 1); y1 = Math.min(cy1, y1 + 1);
+    // Quelle: Inhalt dieser Zelle (nur ihre Pixel), im Original-Maßstab
+    const bx0 = Math.floor(q[0] / f), by0 = Math.floor(q[1] / f), bw = Math.ceil((q[2] - q[0] + 1) / f), bh = Math.ceil((q[3] - q[1] + 1) / f);
+    const mk = document.createElement('canvas'); mk.width = q[2] - q[0] + 1; mk.height = q[3] - q[1] + 1; const mg = mk.getContext('2d'); const md = mg.createImageData(mk.width, mk.height);
+    for (let y = q[1]; y <= q[3]; y++) for (let x = q[0]; x <= q[2]; x++) if (cellOf[y * SW + x] === k) { const o = ((y - q[1]) * mk.width + (x - q[0])) * 4; md.data[o] = md.data[o + 1] = md.data[o + 2] = 255; md.data[o + 3] = 255; }
+    mg.putImageData(md, 0, 0);
+    const tc = document.createElement('canvas'); tc.width = bw; tc.height = bh; const tg = tc.getContext('2d'); tg.drawImage(im0, bx0, by0, bw, bh, 0, 0, bw, bh);
+    tg.globalCompositeOperation = 'destination-in'; tg.drawImage(mk, 0, 0, bw, bh);
+    // Mittelfarbe des Knochens (füllt, was das Foto nicht abdeckt)
+    const sm = document.createElement('canvas'); sm.width = 8; sm.height = 8; const smg = sm.getContext('2d', { willReadFrequently: true }); smg.drawImage(tc, 0, 0, 8, 8); const sd = smg.getImageData(0, 0, 8, 8).data; let rr = 0, gg = 0, bb2 = 0, aa = 0; for (let i = 0; i < 64; i++) { const a = sd[i * 4 + 3]; rr += sd[i * 4] * a; gg += sd[i * 4 + 1] * a; bb2 += sd[i * 4 + 2] * a; aa += a; } const mc = aa ? `rgb(${Math.round(rr / aa)},${Math.round(gg / aa)},${Math.round(bb2 / aa)})` : '#d8c8a8';
+    og.fillStyle = '#fff'; og.fillRect(cx0, cy0, cx1 - cx0, cy1 - cy0);
+    og.fillStyle = mc; og.fillRect(x0, y0, x1 - x0, y1 - y0);
+    og.drawImage(tc, x0, y0, x1 - x0, y1 - y0); fitted++;
+  });
+  const dataUrl = out.toDataURL('image/png');
+  boneAtlas = { dataUrl, layout: L, src: 'angepasst', img: await loadImgUrl(dataUrl), orig: src };
+  boneAtlas.small = await shrinkDataUrl(dataUrl); layerVer++; saveLayers(); schedulePreview(); boneUi();
+  draftNote = `Automatisch angepasst: ${fitted} Knochen in ihre Flächen eingepasst${kept ? `, ${kept} ohne erkennbares Foto unverändert` : ''}. „Übernehmen“ legt es fest; „Anpassung zurück“ stellt dein Bild wieder her. `; draw(); showCarpet();
+}
+function undoAutoFit() { if (!boneAtlas || !boneAtlas.orig) return; loadImgUrl(boneAtlas.orig).then(async (im) => { boneAtlas = { dataUrl: boneAtlas.orig, layout: boneAtlas.layout, src: 'import', img: im }; boneAtlas.small = await shrinkDataUrl(boneAtlas.dataUrl); layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Anpassung zurückgenommen (dein Bild). '; draw(); showCarpet(); }); }
+$('boneFit').onclick = autoFitAtlas; $('carpetFit').onclick = autoFitAtlas; $('boneFitUndo').onclick = undoAutoFit; $('carpetFitUndo').onclick = undoAutoFit;
+
 let carpetOut = true;
 async function showCarpet() {
   if (!boneAtlas) return;
@@ -1004,7 +1068,7 @@ async function showCarpet() {
       g.restore(); note = ' Türkis = Fläche des Knochens im Spiel: Die Textur muss innerhalb davon liegen.';
     }
   }
-  $('carpetInfo').textContent = `${Object.keys(L.bones).length} Knochen · ${L.W}×${L.H} px · Maßstab ${L.ppc} px/cm (alle gleich) · Quelle: ${boneAtlas.src === 'bild' ? 'Knochen-Bild' : boneAtlas.src === 'import' ? 'Import' : 'Zeichnung'}. Die Knochen im Editor und im Spiel bleiben, wo sie sind – nur die Textur liegt hier so.${note}`;
+  $('carpetInfo').textContent = `${Object.keys(L.bones).length} Knochen · ${L.W}×${L.H} px · Maßstab ${L.ppc} px/cm (alle gleich) · Quelle: ${boneAtlas.src === 'bild' ? 'Knochen-Bild' : boneAtlas.src === 'import' ? 'Import' : boneAtlas.src === 'angepasst' ? 'Import, automatisch angepasst' : 'Zeichnung'}. Die Knochen im Editor und im Spiel bleiben, wo sie sind – nur die Textur liegt hier so.${note}`;
   $('carpetOut').classList.toggle('sel', carpetOut);
   $('carpet').classList.add('open');
 }
