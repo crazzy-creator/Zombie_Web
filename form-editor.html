@@ -42,7 +42,7 @@
   #carpet{position:absolute;inset:0;background:rgba(10,8,8,.97);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
   #carpet.open{display:flex}
   #carpetWrap{flex:1;min-height:0;overflow:auto;background:repeating-conic-gradient(#2a2323 0 25%,#1d1717 0 50%) 0 0/16px 16px;border:1px solid #4a4040;border-radius:8px}
-  #carpetImg{display:block;max-width:100%;margin:auto}
+  #carpetCv{display:block;max-width:100%;height:auto;margin:auto}
   #ovl textarea{flex:1;background:#0c0909;color:#ddd;border:1px solid #4a4040;border-radius:8px;font-size:12px;padding:8px}
 </style>
 </head>
@@ -174,10 +174,10 @@
       <span id="alignSliders"><label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
       <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label></span>
     </div>
-    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="carpet"><div class="row"><button id="carpetPng" class="main">Drucken (PNG + Layout)</button><button id="carpetJson">Layout (JSON)</button><button id="carpetVec">Vektor drucken (zum Nachzeichnen)</button><button id="carpetClose">Schließen</button><span class="hint" id="carpetInfo"></span></div><div id="carpetWrap"><img id="carpetImg" alt=""></div></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
+    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="carpet"><div class="row"><button id="carpetPng" class="main">Drucken (PNG + Layout)</button><button id="carpetJson">Layout (JSON)</button><button id="carpetVec">Vektor drucken (zum Nachzeichnen)</button><button id="carpetOut" class="sel" title="Zeigt die Flächen der Knochen (türkis) über dem Bild: nur dort, wo das Bild innerhalb der Flächen liegt, landet die Textur im Spiel">Umrisse prüfen</button><button id="carpetClose">Schließen</button><span class="hint" id="carpetInfo"></span></div><div id="carpetWrap"><canvas id="carpetCv"></canvas></div></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
     <div class="hint" id="status"></div>
   </main>
-<div id="pv"><div id="pvtitle">⠿ Vorschau (ziehen)</div><canvas id="pvc"></canvas><div id="pvsize"></div><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label></div></div></div>
+<div id="pv"><div id="pvtitle">⠿ Vorschau (ziehen)</div><canvas id="pvc"></canvas><div id="pvsize"></div><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label><label title="Haut und Fleisch durchsichtig: Knochen und ihre Textur sehen"><input id="pvX" type="checkbox"> Röntgen</label></div></div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const EMB = window.parent !== window;
@@ -896,9 +896,15 @@ async function restoreLayers(r) {
   if (!r) return;
   if (r.bone) { boneRefData = r.bone; boneRef = await loadImgUrl(r.bone); }
   if (r.flesh) { fleshRefData = r.flesh; fleshRef = await loadImgUrl(r.flesh); }
-  if (r.atlas && r.atlas.dataUrl) boneAtlas = { dataUrl: r.atlas.dataUrl, layout: r.atlas.layout, src: r.atlas.src || 'import', img: await loadImgUrl(r.atlas.dataUrl) };
+  if (r.atlas && r.atlas.dataUrl) { boneAtlas = { dataUrl: r.atlas.dataUrl, layout: r.atlas.layout, src: r.atlas.src || 'import', img: await loadImgUrl(r.atlas.dataUrl) }; boneAtlas.small = await shrinkDataUrl(r.atlas.dataUrl); }
 }
 async function loadLayers(kind) { await restoreLayers(await kvGet('layer/' + kind)); }
+// Große Teppiche für Vorschau/Spiel verkleinern: höchstens 2048 px, JPEG (schnelleres Laden, weniger Speicher)
+async function shrinkDataUrl(url, max = 2048) {
+  const im = await loadImgUrl(url); if (!im) return url;
+  const m = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * m); c.height = Math.round(im.naturalHeight * m);
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.92);
+}
 const layerImg = (which) => (which === 'bone' ? boneRef : fleshRef);
 
 // --- Knochen-Infos aus dem Spiel (nur Lesen) ---
@@ -962,7 +968,7 @@ async function buildBoneAtlas(useImage) {
   let fromImg = 0, vec = 0; const img = useImage ? boneRef : null;
   for (const b of bi) { const R = layout.bones[b.name]; if (img && drawBoneCrop(g, b, R, layout.ppc, img)) fromImg++; else { drawBoneVector(g, b, R, layout.ppc); vec++; } }
   const dataUrl = cvs.toDataURL('image/png');
-  boneAtlas = { dataUrl, layout, src: img ? 'bild' : 'vektor', img: await loadImgUrl(dataUrl) }; layerVer++; saveLayers(); schedulePreview();
+  boneAtlas = { dataUrl, layout, src: img ? 'bild' : 'vektor', img: await loadImgUrl(dataUrl) }; boneAtlas.small = await shrinkDataUrl(dataUrl); layerVer++; saveLayers(); schedulePreview();
   return { fromImg, vec, n: bi.length };
 }
 // --- Datei ausgeben (Browser-Download oder APK-Teilen) ---
@@ -977,11 +983,32 @@ function saveOut(name, payload, mime) {
   });
 }
 const dataUrlBlob = (u) => { const [h, b] = u.split(','), mime = /:(.*?);/.exec(h)[1], bin = atob(b), n = bin.length, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: mime }); };
-function showCarpet() {
-  if (!boneAtlas) return; $('carpetImg').src = boneAtlas.dataUrl;
-  $('carpetInfo').textContent = `${Object.keys(boneAtlas.layout.bones).length} Knochen · ${boneAtlas.layout.W}×${boneAtlas.layout.H} px · Maßstab ${boneAtlas.layout.ppc} px/cm (alle gleich) · Quelle: ${boneAtlas.src === 'bild' ? 'Knochen-Bild' : boneAtlas.src === 'import' ? 'Import' : 'Zeichnung'}. Die Knochen im Editor und im Spiel bleiben, wo sie sind – nur die Textur liegt hier so.`;
+let carpetOut = true;
+async function showCarpet() {
+  if (!boneAtlas) return;
+  const cv = $('carpetCv'), im = boneAtlas.img || (await loadImgUrl(boneAtlas.dataUrl)), L = boneAtlas.layout;
+  cv.width = im.naturalWidth || im.width; cv.height = im.naturalHeight || im.height;
+  const g = cv.getContext('2d'); g.clearRect(0, 0, cv.width, cv.height); g.drawImage(im, 0, 0);
+  let note = '';
+  if (carpetOut) {
+    const bi = await askBoneInfo();
+    if (bi) {
+      const sx = cv.width / L.W, ppc = L.ppc;
+      g.save(); g.lineJoin = 'round';
+      for (const b of bi) {
+        const R = L.bones[b.name]; if (!R) continue;
+        const m = cellMat(R, ppc, R.x, R.y);
+        g.setTransform(sx * m[0], sx * m[1], sx * m[2], sx * m[3], sx * m[4], sx * m[5]);
+        boneMaskCm(g, b); g.fillStyle = 'rgba(0,230,255,.16)'; g.fill(); g.lineWidth = 1.6 / (sx * ppc); g.strokeStyle = 'rgba(0,230,255,.9)'; g.stroke();
+      }
+      g.restore(); note = ' Türkis = Fläche des Knochens im Spiel: Die Textur muss innerhalb davon liegen.';
+    }
+  }
+  $('carpetInfo').textContent = `${Object.keys(L.bones).length} Knochen · ${L.W}×${L.H} px · Maßstab ${L.ppc} px/cm (alle gleich) · Quelle: ${boneAtlas.src === 'bild' ? 'Knochen-Bild' : boneAtlas.src === 'import' ? 'Import' : 'Zeichnung'}. Die Knochen im Editor und im Spiel bleiben, wo sie sind – nur die Textur liegt hier so.${note}`;
+  $('carpetOut').classList.toggle('sel', carpetOut);
   $('carpet').classList.add('open');
 }
+$('carpetOut').onclick = () => { carpetOut = !carpetOut; showCarpet(); };
 function boneUi() { $('boneInfo').textContent = boneAtlas ? `Teppich: ${boneAtlas.src === 'bild' ? 'aus Knochen-Bild' : boneAtlas.src === 'import' ? 'importiert' : 'Zeichnung'} (${Object.keys(boneAtlas.layout.bones).length} Knochen)` : 'Noch kein Knochen-Bild.'; $('fleshInfo').textContent = fleshRef ? 'Fleisch-Bild geladen.' : 'Noch kein Fleisch-Bild.'; }
 $('boneFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await readImageFile(f); if (!r) return; boneRef = r.img; boneRefData = r.dataUrl; boneRemoved = false; layerVer++; const n = await buildBoneAtlas(true); draftNote = n ? `Knochen-Bild geladen: ${n.fromImg} von ${n.n} Knochen aus dem Bild${n.vec ? `, ${n.vec} ohne Ausrichtung (Zeichnung)` : ''}. „Übernehmen“ legt es fest. ` : ''; saveLayers(); boneUi(); draw(); };
 $('boneFromImg').onclick = async () => { if (!boneRef) { draftNote = 'Zuerst ein Knochen-Bild laden. '; draw(); return; } const n = await buildBoneAtlas(true); if (n) draftNote = `Neu aus dem Bild: ${n.fromImg} von ${n.n} Knochen. `; boneUi(); draw(); };
@@ -1015,7 +1042,7 @@ $('boneImp').onchange = async (e) => {
   const sx = im.width / layout.W, sy = im.height / layout.H;   // erlaubt anderes Auflösungsmaß (z. B. doppelt so groß bemalt)
   if (Math.abs(sx - sy) > 0.01) { draftNote = '⚠ Bildformat passt nicht zum Layout (Seitenverhältnis). Nicht beschneiden oder strecken. '; draw(); return; }
   if (layout.kind && layout.kind !== info.kind) { draftNote = `⚠ Das Layout gehört zur Figur „${layout.kind}“. `; draw(); return; }
-  boneAtlas = { dataUrl, layout, src: 'import', img: im }; boneRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = `Teppich importiert (${Object.keys(layout.bones).length} Knochen). „Übernehmen“ legt ihn fest. `; draw();
+  boneAtlas = { dataUrl, layout, src: 'import', img: im }; boneAtlas.small = await shrinkDataUrl(dataUrl); boneRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = `Teppich importiert (${Object.keys(layout.bones).length} Knochen). Prüfe im Fenster, ob die Textur in den türkisen Flächen liegt; „Übernehmen“ legt sie fest. `; draw(); showCarpet();
 };
 $('fleshFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await readImageFile(f); if (!r) return; fleshRef = r.img; fleshRefData = r.dataUrl; fleshRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Fleisch-Bild geladen (gleiche Ausrichtung wie das Referenzbild). „Übernehmen“ legt es fest. '; draw(); };
 $('fleshRm').onclick = () => { fleshRef = null; fleshRefData = null; fleshRemoved = true; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Fleisch-Bild entfernt. '; draw(); };
@@ -1306,7 +1333,7 @@ $('apply').onclick = async () => {
   // Fleisch-Bild und Knochen-Teppich festschreiben (nur Grafik)
   for (const [p] of PARTS) { const key = kind + '/' + ($('solo').checked ? p : 'all'); if (fleshRef && ref && aligns[key]) { const r = skinCanvas(p, aligns[key], fleshRef); await kvSet(`flesh/${kind}/${p}`, { dataUrl: r.cvs.toDataURL('image/jpeg', 0.92), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] }); } else if (fleshRemoved) await kvDel(`flesh/${kind}/${p}`); }
   fleshRemoved = false;
-  if (boneAtlas) await kvSet(`bonetex/${kind}`, { dataUrl: boneAtlas.dataUrl, layout: boneAtlas.layout }); else if (boneRemoved) await kvDel(`bonetex/${kind}`);
+  if (boneAtlas) await kvSet(`bonetex/${kind}`, { dataUrl: boneAtlas.small || await shrinkDataUrl(boneAtlas.dataUrl), layout: boneAtlas.layout }); else if (boneRemoved) await kvDel(`bonetex/${kind}`);
   boneRemoved = false;
   post({ zdForm: 'save', kind, data }); saveDraft();
 };
@@ -1337,14 +1364,15 @@ function sendPreview() {
   const q = Math.min(1, 1800 / Math.max(pvc.width, pvc.height)); pvSent = { z: pvView.z, x: pvView.x, y: pvView.y, q, W: Math.round(pvc.width * q), H: Math.round(pvc.height * q) };
   const flesh = {};
   if (fleshRef && ref) for (const [p] of PARTS) { const key = info.kind + '/' + ($('solo').checked ? p : 'all'); if (!aligns[key]) continue; const ck = JSON.stringify([aligns[key], work[p], layerVer]); if (pvFleshKeys[p] !== ck) { const r = skinCanvas(p, aligns[key], fleshRef), sc = Math.min(1, 512 / Math.max(r.cvs.width, r.cvs.height)), t = document.createElement('canvas'); t.width = Math.round(r.cvs.width * sc); t.height = Math.round(r.cvs.height * sc); t.getContext('2d').drawImage(r.cvs, 0, 0, t.width, t.height); pvFlesh[p] = { dataUrl: t.toDataURL('image/jpeg', 0.85), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] }; pvFleshKeys[p] = ck; } flesh[p] = pvFlesh[p]; }
-  const boneMsg = pvBoneSent !== layerVer ? { bone: boneAtlas ? { dataUrl: boneAtlas.dataUrl, layout: boneAtlas.layout } : null } : {}; pvBoneSent = layerVer;
-  post({ zdForm: 'preview', kind: info.kind, data: currentData(), skins, flesh, ...boneMsg, w: pvSent.W, h: pvSent.H, view: { z: pvView.z, x: pvView.x * q, y: pvView.y * q } });
+  const boneMsg = pvBoneSent !== layerVer ? { bone: boneAtlas ? { dataUrl: boneAtlas.small || boneAtlas.dataUrl, layout: boneAtlas.layout } : null } : {}; pvBoneSent = layerVer;
+  post({ zdForm: 'preview', kind: info.kind, data: currentData(), skins, flesh, xray: $('pvX').checked, ...boneMsg, w: pvSent.W, h: pvSent.H, view: { z: pvView.z, x: pvView.x * q, y: pvView.y * q } });
   setTimeout(() => { if (pvBusy) { pvBusy = false; if (pvDirty) schedulePreview(); } }, 6000);
 }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormPreview) return; pvBusy = false; if (d.bitmap && pvSent) { pvBitmap = { img: d.bitmap, W: pvSent.W, H: pvSent.H, z: pvSent.z, x: pvSent.x, y: pvSent.y, q: pvSent.q }; pvPaint(); } if (pvDirty) schedulePreview(); });
 $('pvP').onclick = () => { pvView.z = Math.min(40, pvView.z * 1.4); pvPaint(); schedulePreview(); }; $('pvM').onclick = () => { pvView.z = Math.max(0.4, pvView.z / 1.4); pvPaint(); schedulePreview(); };
 $('pvR').onclick = () => { pvView = { z: 1, x: 0, y: 0 }; pvPaint(); schedulePreview(); };
 $('pvBig').onclick = () => { pvBig = !pvBig; $('pv').style.width = pvBig ? '340px' : '170px'; $('pv').style.height = pvBig ? '600px' : '300px'; pvClamp(); pvSave(); pvResize(); };
+$('pvX').onchange = () => { pvDirty = true; sendPreview(); };
 $('pvLive').onchange = () => { if ($('pvLive').checked) { pvDirty = true; sendPreview(); } else pvPaint(); };
 let pvDrag = null;
 $('pv').addEventListener('pointerdown', (e) => { if (e.target.closest('#pvbar')) return; pvDrag = { x: e.clientX, y: e.clientY }; $('pv').setPointerCapture(e.pointerId); e.stopPropagation(); });
