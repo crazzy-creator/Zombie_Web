@@ -31,7 +31,7 @@
   #meas .m{display:flex;gap:6px;align-items:center;margin:5px 0;flex-wrap:wrap}
   #meas input[type=number]{width:64px;background:#0c0909;color:#ddd;border:1px solid #4a4040;border-radius:6px;padding:4px}
   #chk .bad{color:#ff8a8a}#chk .ok{color:#8aff9a}#chk .warn{color:#ffd37a}
-  #pv{position:absolute;left:auto;top:60px;right:10px;width:170px;height:300px;min-width:110px;min-height:150px;background:#171212;border:1px solid #7a6060;border-radius:8px;z-index:200;overflow:hidden;touch-action:none;box-shadow:0 4px 18px rgba(0,0,0,.6)}
+  #pv{box-sizing:border-box;position:absolute;left:auto;top:60px;right:10px;width:170px;height:300px;min-width:110px;min-height:150px;background:#171212;border:1px solid #7a6060;border-radius:8px;z-index:200;overflow:hidden;touch-action:none;box-shadow:0 4px 18px rgba(0,0,0,.6)}
   #pvtitle{position:absolute;left:0;right:0;top:0;height:20px;background:rgba(10,8,8,.82);color:#a89898;font-size:11px;line-height:20px;text-align:center;cursor:move;z-index:2;touch-action:none;user-select:none}
   #pvsize{position:absolute;right:0;bottom:0;width:26px;height:26px;z-index:3;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 50%,#9a8484 50%,#9a8484 58%,transparent 58%,transparent 70%,#9a8484 70%,#9a8484 78%,transparent 78%)}
   #pv canvas{width:100%;height:100%}
@@ -663,7 +663,7 @@ function renderMeas() {
   h += `<div class="m hint">Die Längen oben ändern dagegen die Knochen im Editor selbst.</div>`;
   h += `<div class="m">Verschieben (0,5 cm): <button data-mv="0:-1">▲</button><button data-mv="0:1">▼</button><button data-mv="-1:0">◀</button><button data-mv="1:0">▶</button> <span class="hint">das ganze Glied samt ${nm[2]}</span></div>`;
   h += `<div class="m"><label><input id="measFollow" type="checkbox" ${followOutline ? 'checked' : ''}> Umriss folgt</label></div>`;
-  if (si) { const dev = Math.abs(si.r - 1) * 100; h += `<div class="m ${dev > 4 ? 'warn' : ''}" style="color:${dev > 4 ? '#ffd37a' : '#8aff9a'}">Bild-Maßstab dieses Teils: ${(si.r * 100).toFixed(0)} % des Rumpf-Maßstabs ${dev > 4 ? `– das Glied ist dadurch ca. ${dev.toFixed(0)} % ${si.r < 1 ? 'zu lang' : 'zu kurz'}` : '– passt'} ${dev > 4 ? '<button id="measScale">Auf Rumpf-Maßstab umrechnen</button>' : ''}</div>`; }
+  if (si) { const gs = GS[part] || 1, rr = si.r / gs, dev = Math.abs(rr - 1) * 100; h += `<div class="m ${dev > 4 ? 'warn' : ''}" style="color:${dev > 4 ? '#ffd37a' : '#8aff9a'}">Bild-Maßstab dieses Teils: ${(si.r * 100).toFixed(0)} % des Rumpf-Maßstabs${gs !== 1 ? ` (Spiel-Größe ${Math.round(gs * 100)} % schon eingerechnet)` : ''} ${dev > 4 ? `– das Glied ist dadurch ca. ${dev.toFixed(0)} % ${rr < 1 ? 'zu lang' : 'zu kurz'}` : '– passt'} ${dev > 4 ? '<button id="measScale">Auf Rumpf-Maßstab umrechnen (nur im Spiel)</button>' : ''}</div>`; }
   else h += '<div class="m hint">Bild-Maßstab: nicht vergleichbar (Rumpf und dieses Teil müssen einzeln mit Referenzbild ausgerichtet sein).</div>';
   box.innerHTML = h;
   $('measClose').onclick = () => box.classList.remove('open');
@@ -673,7 +673,8 @@ function renderMeas() {
   [0, 1].forEach((i) => { $('segv' + i).onchange = () => { if (guard()) return; const v = +$('segv' + i).value; if (!(v > 2)) return; const ks = [1, 1]; ks[i] = v / boneLen(c[i]); pushUndo(); scaleChain(c, ks); limbAfter(); }; });
   box.querySelectorAll('button[data-gs]').forEach((bt) => { bt.onclick = () => { if (guard()) return; pushUndo(); const k = +bt.dataset.gs; if (!k) delete GS[part]; else { const v = Math.max(0.5, Math.min(1.8, (GS[part] || 1) * k)); if (Math.abs(v - 1) < 0.003) delete GS[part]; else GS[part] = Math.round(v * 1000) / 1000; } changed(); renderMeas(); }; });
   box.querySelectorAll('button[data-mv]').forEach((bt) => { bt.onclick = () => { if (guard()) return; const [dx, dy] = bt.dataset.mv.split(':').map(Number); pushUndo(); for (const m of subtree(c[0])) moveBody(m, 0, 1, [0, 0], [dx * 0.5, dy * 0.5]); if (followOutline) work[part] = work[part].map(([x, y]) => [x + dx * 0.5, y + dy * 0.5]); TF[part] = cloneT(); changed(); renderMeas(); }; });
-  if (si && $('measScale')) $('measScale').onclick = () => { if (guard()) return; pushUndo(); rescalePart(part, si.r, limbRoot(c)); si.a.s = si.a.s / si.r; if (si.a.s0) si.a.s0 = si.a.s0 / si.r; saveRef(); changed(); renderMeas(); };
+  // Nur die Größe im Spiel (gameScale) wird angepasst: Netz, Knochen, Gelenke, Umrisse und die Bild-Ausrichtung im Editor bleiben unverändert
+  if (si && $('measScale')) $('measScale').onclick = () => { if (guard()) return; pushUndo(); const v = Math.max(0.5, Math.min(1.8, si.r)); if (Math.abs(v - 1) < 0.003) delete GS[part]; else GS[part] = Math.round(v * 1000) / 1000; changed(); renderMeas(); };
 }
 $('bMeas').onclick = () => { const b = $('meas'); if (b.classList.contains('open')) { b.classList.remove('open'); return; } $('chk').classList.remove('open'); renderMeas(); b.classList.add('open'); };
 
