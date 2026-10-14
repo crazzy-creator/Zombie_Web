@@ -54,6 +54,7 @@
     <button id="btnDone" title="Dieses Teil sperren, damit nichts mehr aus Versehen verschoben oder gespiegelt wird">✔ Fertig</button>
     <button id="undo" title="Rückgängig">↶</button>
     <button id="redo" title="Wiederholen">↷</button>
+    <button id="pvToggle" title="Das Vorschau-Fenster (so sieht es im Spiel aus) ein- oder ausblenden; beim Anzeigen kommt es an eine sichtbare Stelle zurück">Vorschau-Fenster anzeigen</button>
     <button id="check">Prüfen</button>
     <button id="apply" class="main">Übernehmen</button>
     <button id="close" style="display:none">Schließen</button>
@@ -1438,7 +1439,7 @@ $('taLoad').onclick = () => post({ zdForm: 'import', text: $('ta').value, kind: 
 function post(m) { if (EMB) window.parent.postMessage(m, '*'); }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormInfo) return; if (d.error) { $('taInfo').textContent = d.error; return; } setInfo(d).then(() => $('ovl').classList.remove('open')); });
 // ---------- Vorschau-Fenster (Echtzeit-Ergebnis aus dem Spiel) ----------
-let pvBitmap = null, pvBusy = false, pvTimer = 0, pvDirty = false, pvView = { z: 1, x: 0, y: 0 }, pvBig = false, pvSent = null;
+let pvShown = true, pvBitmap = null, pvBusy = false, pvTimer = 0, pvDirty = false, pvView = { z: 1, x: 0, y: 0 }, pvBig = false, pvSent = null;
 const pvc = $('pvc'), pvx = pvc.getContext('2d'), pvSkins = {}, pvKeys = {}, pvFlesh = {}, pvFleshKeys = {}; let pvBoneSent = -1;
 function pvResize() { const w = $('pv').clientWidth, h = $('pv').clientHeight, d = window.devicePixelRatio || 1; const nw = Math.max(10, Math.round(w * d)), nh = Math.max(10, Math.round(h * d)); if (nw !== pvc.width || nh !== pvc.height) { pvc.width = nw; pvc.height = nh; schedulePreview(); } pvPaint(); }
 // pvBitmap = { img, W, H, z, x, y, q }: Bild wurde für diese Ansicht (Zoom z, Verschiebung x/y in Zeichenflächen-Pixeln) scharf gerendert (q = Bild-Pixel je Zeichenflächen-Pixel)
@@ -1448,7 +1449,7 @@ function pvPaint() {
   const bm = pvBitmap, r = pvView.z / bm.z; // bis das scharfe Bild für die neue Ansicht da ist, wird das alte skaliert (kurz unscharf)
   pvx.imageSmoothingQuality = 'high'; pvx.drawImage(bm.img, (w / 2) * (1 - r) - bm.x * r + pvView.x, (h / 2) * (1 - r) - bm.y * r + pvView.y, (bm.W / bm.q) * r, (bm.H / bm.q) * r);
 }
-function schedulePreview() { if (!info || !EMB || !$('pvLive').checked) return; pvDirty = true; if (pvTimer || pvBusy) return; pvTimer = setTimeout(sendPreview, 280); }
+function schedulePreview() { if (!info || !EMB || !$('pvLive').checked || !pvShown) return; pvDirty = true; if (pvTimer || pvBusy) return; pvTimer = setTimeout(sendPreview, 280); }
 function sendPreview() {
   pvTimer = 0; if (!pvDirty || pvBusy || !info) return; pvDirty = false; pvBusy = true;
   const skins = {};
@@ -1474,7 +1475,16 @@ $('pv').addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation
 
 // Fenster verschieben (Titelleiste) und skalieren (Ecke unten rechts): liegt immer über dem Editor und fängt alle Berührungen selbst ab
 const pvEl = $('pv');
-function pvClamp() { const A = $('app'), aw = A.clientWidth, ah = A.clientHeight; let w = pvEl.offsetWidth, h = pvEl.offsetHeight; w = Math.min(w, aw - 8); h = Math.min(h, ah - 8); pvEl.style.width = w + 'px'; pvEl.style.height = h + 'px'; const l = Math.max(0, Math.min(aw - w, pvEl.offsetLeft)), t = Math.max(0, Math.min(ah - h, pvEl.offsetTop)); pvEl.style.left = l + 'px'; pvEl.style.top = t + 'px'; pvEl.style.right = 'auto'; }
+function pvClamp() { if (!pvEl.offsetWidth) return; const A = $('app'), aw = A.clientWidth, ah = A.clientHeight; let w = pvEl.offsetWidth, h = pvEl.offsetHeight; w = Math.min(w, aw - 8); h = Math.min(h, ah - 8); pvEl.style.width = w + 'px'; pvEl.style.height = h + 'px'; const l = Math.max(0, Math.min(aw - w, pvEl.offsetLeft)), t = Math.max(0, Math.min(ah - h, pvEl.offsetTop)); pvEl.style.left = l + 'px'; pvEl.style.top = t + 'px'; pvEl.style.right = 'auto'; }
+try { pvShown = localStorage.getItem('zd_form_pv_show') !== '0'; } catch (e) {}
+function pvApplyShow(reset) {
+  $('pv').style.display = pvShown ? '' : 'none'; $('pvToggle').classList.toggle('sel', pvShown); $('pvToggle').textContent = pvShown ? 'Vorschau-Fenster ausblenden' : 'Vorschau-Fenster anzeigen';
+  try { localStorage.setItem('zd_form_pv_show', pvShown ? '1' : '0'); } catch (e) {}
+  if (!pvShown) return;
+  if (reset) { pvEl.style.left = 'auto'; pvEl.style.right = '10px'; pvEl.style.top = '60px'; pvEl.style.width = '170px'; pvEl.style.height = '300px'; try { localStorage.removeItem('zd_form_pv'); } catch (e) {} }
+  pvClamp(); pvResize(); pvDirty = true; pvBitmap = null; schedulePreview();
+}
+$('pvToggle').onclick = () => { pvShown = !pvShown; pvApplyShow(pvShown); };
 function pvSave() { try { localStorage.setItem('zd_form_pv', JSON.stringify({ l: pvEl.offsetLeft, t: pvEl.offsetTop, w: pvEl.offsetWidth, h: pvEl.offsetHeight })); } catch (e) {} }
 try { const o = JSON.parse(localStorage.getItem('zd_form_pv') || 'null'); if (o) { pvEl.style.left = o.l + 'px'; pvEl.style.top = o.t + 'px'; pvEl.style.right = 'auto'; pvEl.style.width = o.w + 'px'; pvEl.style.height = o.h + 'px'; } } catch (e) {}
 const rotD = (dx, dy) => rot === 90 ? [dy, -dx] : rot === -90 ? [-dy, dx] : [dx, dy];
@@ -1487,7 +1497,7 @@ function pvHandle(el, kind) {
 }
 pvHandle($('pvtitle'), 'move'); pvHandle($('pvsize'), 'size');
 for (const t of ['pointerdown', 'pointermove', 'pointerup', 'click', 'wheel', 'touchstart', 'touchmove']) pvEl.addEventListener(t, (e) => e.stopPropagation(), { passive: t.startsWith('touch') || t === 'wheel' ? false : undefined });
-setMode('bone'); resize(); pvClamp(); pvResize(); fitView();
+setMode('bone'); resize(); pvApplyShow(false); pvClamp(); pvResize(); fitView();
 post({ zdForm: 'ready' });
 </script>
 </body>
