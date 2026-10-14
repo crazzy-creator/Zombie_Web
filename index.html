@@ -102,6 +102,9 @@
       #fire { position: fixed; right: max(14px, env(safe-area-inset-right)); bottom: 18px; width: 92px; height: 92px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #e0454c, #8a1218); color: #fff; border: 3px solid #3b0a0d; font-size: 16px; font-weight: 700; letter-spacing: 1px; display: none; z-index: 4; touch-action: none; box-shadow: 0 4px 14px rgba(0,0,0,0.6); }
       #fire:active { transform: scale(0.95); filter: brightness(1.2); }
       #slowpop input { width: 100%; margin: 10px 0 2px; accent-color: #c4373e; }
+      .mrange { padding: 6px 10px 2px; }
+      .mrange input { width: 100%; margin: 8px 0 2px; accent-color: #c4373e; }
+      .mrange .val { font-size: 13px; color: #e6dcdc; }
       #slowpop .val { font-size: 15px; text-align: center; }
       #shop { width: min(560px, 92vw); overflow-y: scroll; -webkit-overflow-scrolling: touch; padding-right: 10px; box-sizing: border-box; }
       #shop::-webkit-scrollbar { width: 12px; }
@@ -118,7 +121,7 @@
       #shopthumb { position: absolute; left: 0; right: 0; border-radius: 5px; background: #c4373e; }
       #shop .done { margin-top: 14px; width: 100%; position: sticky; bottom: 0; }
     </style>
-    <script type="module" crossorigin src="./assets/index-D78sIobi.js"></script>
+    <script type="module" crossorigin src="./assets/index-DTxuRagN.js"></script>
   </head>
   <body>
     <div id="loading"><div class="box"><span id="ldtxt">Lädt …</span><div class="bar"><i></i></div></div></div>
@@ -162,6 +165,7 @@
       <button id="outlinebtn" data-ic="shape"><span>Umrandung</span></button>
       <button id="bonebtn" data-ic="shape"><span>Knochenränder</span></button>
       <button id="twitchbtn" data-ic="blood"><span>Zappeln &amp; Stöhnen</span></button>
+      <div class="mrange"><div class="val">Motordrehzahl: <span id="gearval">2,6</span> rad/s</div><input id="gearrange" type="range" min="0.5" max="8" step="0.1" value="2.6" /></div>
       <div class="mver" id="mver"></div>
     </div>
     <div id="campanel" class="pop">

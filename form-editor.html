@@ -39,6 +39,10 @@
   #pvbar button{padding:2px 6px;font-size:11px}
   #ovl{position:absolute;inset:0;background:rgba(10,8,8,.95);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
   #ovl.open{display:flex}
+  #carpet{position:absolute;inset:0;background:rgba(10,8,8,.97);display:none;flex-direction:column;gap:8px;padding:12px;z-index:5}
+  #carpet.open{display:flex}
+  #carpetWrap{flex:1;min-height:0;overflow:auto;background:repeating-conic-gradient(#2a2323 0 25%,#1d1717 0 50%) 0 0/16px 16px;border:1px solid #4a4040;border-radius:8px}
+  #carpetImg{display:block;max-width:100%;margin:auto}
   #ovl textarea{flex:1;background:#0c0909;color:#ddd;border:1px solid #4a4040;border-radius:8px;font-size:12px;padding:8px}
 </style>
 </head>
@@ -71,6 +75,30 @@
       <button id="mForm">2 Form</button>
       <button id="mOrgan">3 Innereien</button>
       <button id="mAlign">4 Bild/Haut</button>
+      <button id="mTBone" title="Eigenes Bild für die Knochen; Teppich-Ansicht zum Drucken/Importieren">5 Knochen-Bild</button>
+      <button id="mTFlesh" title="Eigenes Bild für das Fleisch (je Körperteil)">6 Fleisch-Bild</button>
+    </div>
+    <div id="tboneRows" style="display:none">
+      <div class="row">
+        <label class="btn">Bild laden (Knochen)<input id="boneFile" type="file" accept="image/*" style="display:none"></label>
+        <button id="boneFromImg" title="Teppich neu aus dem Bild erzeugen (z. B. nachdem du Knochen oder Ausrichtung geändert hast)">Aus Bild übernehmen</button>
+        <button id="boneRm">Bild entfernen</button>
+        <button id="boneSpread" class="main">Proportional auf die Bildfläche verteilen</button>
+        <button id="bonePrint">Drucken (PNG + Layout)</button>
+        <button id="boneLayout">Layout (JSON)</button>
+        <label class="btn">Importieren (Bild + Layout)<input id="boneImp" type="file" accept="image/*,.json,application/json" multiple style="display:none"></label>
+        <span class="hint" id="boneInfo"></span>
+      </div>
+      <div class="hint">Das Bild liegt in derselben Ausrichtung wie dein Referenzbild. Der Teppich ordnet nur die TEXTUR neu an – Knochen, Gelenke und Fäden bleiben im Editor und im Spiel unverändert.</div>
+    </div>
+    <div id="tfleshRows" style="display:none">
+      <div class="row">
+        <label class="btn">Bild laden (Fleisch)<input id="fleshFile" type="file" accept="image/*" style="display:none"></label>
+        <button id="fleshRm">Bild entfernen</button>
+        <button id="fleshPrint" class="main">Drucken (PNG)</button>
+        <span class="hint" id="fleshInfo"></span>
+      </div>
+      <div class="hint">Eine Textur je Körperteil, in der Ausrichtung des Referenzbildes (Reiter 4). Im Spiel sichtbar, wo die Haut abgerissen ist. Nur Grafik – nichts bewegt sich.</div>
     </div>
     <div id="alignRows">
       <div class="row">
@@ -79,6 +107,7 @@
         <button id="rM">⟲</button><button id="rP">⟳</button>
         <button id="fine" class="sel">fein</button>
         <span class="hint" id="alignInfo"></span>
+        <button id="skinPrint" title="Haut aller 5 Körperteile in gleichem Maßstab auf ein Bild legen (PNG)">Drucken (Haut PNG)</button>
       </div>
       <div class="row">
         
@@ -144,7 +173,7 @@
       <span id="alignSliders"><label>Figur-Ebene <input id="asc" type="range" min="0.3" max="3" step="0.01" value="1"></label>
       <label>Drehung <input id="arot" type="range" min="-180" max="180" step="0.1" value="0"></label></span>
     </div>
-    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
+    <div class="box"><canvas id="cv"></canvas><div id="chk"></div><div id="meas"></div><div id="carpet"><div class="row"><button id="carpetPng" class="main">Drucken (PNG + Layout)</button><button id="carpetJson">Layout (JSON)</button><button id="carpetClose">Schließen</button><span class="hint" id="carpetInfo"></span></div><div id="carpetWrap"><img id="carpetImg" alt=""></div></div><div id="ovl"><textarea id="ta" spellcheck="false"></textarea><div class="row"><button id="taCopy">Kopieren</button><button id="taLoad" class="main">Einlesen</button><button id="taClose">Schließen</button><span class="hint" id="taInfo"></span></div></div></div>
     <div class="hint" id="status"></div>
   </main>
 <div id="pv"><div id="pvtitle">⠿ Vorschau (ziehen)</div><canvas id="pvc"></canvas><div id="pvsize"></div><div id="pvbar"><button id="pvP">＋</button><button id="pvM">－</button><button id="pvR">⌖</button><button id="pvBig">⛶</button><label><input id="pvLive" type="checkbox" checked>live</label></div></div></div>
@@ -294,7 +323,7 @@ async function setInfo(msg) {
   try { doneP = JSON.parse(localStorage.getItem(DONEKEY(info.kind)) || '{}'); } catch (e) { doneP = {}; }
   $('kind').value = info.kind; sel = null; dirty = true; draftNote = note; undoStack = []; redoStack = [];
   for (const k in aligns) delete aligns[k]; for (const k in touched) delete touched[k];
-  ref = null; await loadRef(info.kind);
+  ref = null; await loadRef(info.kind); await loadLayers(info.kind); pvBoneSent = -1;
   if (cust && cust.ed) { for (const k in cust.ed.aligns || {}) aligns[k] = JSON.parse(JSON.stringify(cust.ed.aligns[k])); for (const k in cust.ed.touched || {}) touched[k] = cust.ed.touched[k]; if (cust.ed.done) { doneP = { ...cust.ed.done }; try { localStorage.setItem(DONEKEY(info.kind), JSON.stringify(doneP)); } catch (e) { /* egal */ } } }
   let legacy = false; for (const k in aligns) if (aligns[k] && (aligns[k].mx || aligns[k].my)) { delete aligns[k].mx; delete aligns[k].my; delete aligns[k].mc; legacy = true; }
   if (legacy) draftNote = 'Hinweis: Die alte Bild-Spiegelung gibt es nicht mehr. Wurde ein Arm/Bein damit bearbeitet, erscheint er jetzt gespiegelt zum Bild – einmal „⇋ Teil spiegeln“ drücken, dann stimmt es auch im Spiel. ';
@@ -518,7 +547,8 @@ async function projectSave() {
   if (!info) return;
   await ensureRefData();
   const skins = {}; const all = await kvList('skin/' + info.kind + '/'); for (const k in all) skins[k.split('/').pop()] = all[k];
-  const proj = { zdProject: 1, app: 'zombie-form-editor', kind: info.kind, savedAt: new Date().toISOString(), data: currentData(), fit: TF, done: doneP, aligns, touched, useRef: $('useRef').checked, keepRef: $('keepRef').checked, solo: $('solo').checked, refWork: refData, refOrig, skins };
+  const flesh = {}; { const fa = await kvList('flesh/' + info.kind + '/'); for (const k in fa) flesh[k.split('/').pop()] = fa[k]; } const bonetex = (await kvGet('bonetex/' + info.kind)) || null;
+  const proj = { layers: { bone: boneRefData, flesh: fleshRefData, atlas: boneAtlas ? { dataUrl: boneAtlas.dataUrl, layout: boneAtlas.layout, src: boneAtlas.src } : null }, flesh, bonetex, zdProject: 1, app: 'zombie-form-editor', kind: info.kind, savedAt: new Date().toISOString(), data: currentData(), fit: TF, done: doneP, aligns, touched, useRef: $('useRef').checked, keepRef: $('keepRef').checked, solo: $('solo').checked, refWork: refData, refOrig, skins };
   const text = JSON.stringify(proj), name = `zombie-projekt-${info.kind}-${new Date().toISOString().slice(0, 10)}.json`;
   // Eingebettet (Spiel/APK): zuerst das Spiel speichern lassen (APK: Teilen-Dialog); sonst Download im Browser
   if (EMB) {
@@ -548,6 +578,8 @@ async function projectLoad(file) {
   refOrig = proj.refOrig || null; refData = proj.refWork || null; ref = null;
   if (refData) await new Promise((res) => { const im = new Image(); im.onload = () => { ref = im; res(); }; im.onerror = res; im.src = refData; });
   for (const part in (proj.skins || {})) await kvSet(`skin/${info.kind}/${part}`, proj.skins[part]);
+  for (const part in (proj.flesh || {})) await kvSet(`flesh/${info.kind}/${part}`, proj.flesh[part]); if (proj.bonetex) await kvSet(`bonetex/${info.kind}`, proj.bonetex);
+  await restoreLayers(proj.layers || null); pvBoneSent = -1; boneUi();
   skinCache = null; for (const k in pvKeys) delete pvKeys[k];
   refreshDone(); updLayers(); updGO(); fitView(); fitAlign(); saveRef(); saveDraft(); draftNote = `Projekt geladen (${proj.savedAt ? proj.savedAt.slice(0, 10) : ''}) – Bild, Ausrichtung und alle Einstellungen sind wieder da. „Übernehmen“ legt die Figur fest. `; draw();
 }
@@ -822,7 +854,7 @@ const pot = (n) => Math.max(64, Math.min(1024, 2 ** Math.round(Math.log2(Math.ma
 const mmul = (m1, m2) => [m1[0] * m2[0] + m1[2] * m2[1], m1[1] * m2[0] + m1[3] * m2[1], m1[0] * m2[2] + m1[2] * m2[3], m1[1] * m2[2] + m1[3] * m2[3], m1[0] * m2[4] + m1[2] * m2[5] + m1[4], m1[1] * m2[4] + m1[3] * m2[5] + m1[5]];  // m1 nach m2
 function partAxis(poly) { const cx = poly.reduce((s2, p) => s2 + p[0], 0) / poly.length, cy = poly.reduce((s2, p) => s2 + p[1], 0) / poly.length; let sxx = 0, sxy = 0, syy = 0; for (const [x, y] of poly) { sxx += (x - cx) ** 2; sxy += (x - cx) * (y - cy); syy += (y - cy) ** 2; } return 0.5 * Math.atan2(2 * sxy, sxx - syy); }
 let skinCache = null;
-function skinCanvas(part, a) {
+function skinCanvas(part, a, srcImg) {
   const bb = bboxOf(work[part]), pad = 0.8, ox = bb[0] - pad, oy = bb[1] - pad, bw = bb[2] - bb[0] + 2 * pad, bh = bb[3] - bb[1] + 2 * pad;
   const ppc = S0 * a.s, TW = pot(bw * ppc), TH = pot(bh * ppc);
   const cvs = document.createElement('canvas'); cvs.width = TW; cvs.height = TH; const g = cvs.getContext('2d');
@@ -832,7 +864,7 @@ function skinCanvas(part, a) {
   const q = [fx, 0, 0, fy, -ox * fx, -oy * fy];
   const t = mmul(q, m);
   g.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]);
-  g.drawImage(ref, 0, 0);
+  g.drawImage(srcImg || ref, 0, 0, ref.width, ref.height);
   return { cvs, ox, oy, bw, bh };
 }
 function genSkin(part) {
@@ -841,6 +873,148 @@ function genSkin(part) {
   return { dataUrl: r.cvs.toDataURL('image/jpeg', 0.92), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] };
 }
 
+// ---------- Textur-Ebenen: Knochen-Bild, Fleisch-Bild, Drucken ----------
+// WICHTIG: Hier geht es NUR um Bilder. Lage, Drehung, Maßstab von Knochen, Gelenken, Fäden, Umrissen und Ausrichtungen
+// werden nie gelesen-und-geändert: der „Teppich“ ist nur eine Umplatzierung der Textur (Bildfläche), nicht der Knochen.
+let boneRef = null, fleshRef = null, boneRefData = null, fleshRefData = null;   // geladene Bilder (gleiche Ausrichtung wie das Referenzbild)
+let boneAtlas = null;      // { dataUrl, layout, src: 'bild' | 'vektor' | 'import', img }
+let layerVer = 0, boneRemoved = false, fleshRemoved = false;
+const PPCS = [28, 24, 20, 16, 12, 9, 7];     // feste Stufen: gleiche Figur ergibt immer dieselbe Teppich-Aufteilung
+const ATLAS_PAD = 0.3;                       // cm Rand um jeden Knochen
+const loadImgUrl = (u) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = u; });
+function readImageFile(f) {
+  return new Promise((res) => { const url = URL.createObjectURL(f), im = new Image(); im.onload = () => { const m = Math.min(1, 4096 / Math.max(im.width, im.height)), cvs = document.createElement('canvas'); cvs.width = Math.round(im.width * m); cvs.height = Math.round(im.height * m); cvs.getContext('2d').drawImage(im, 0, 0, cvs.width, cvs.height); const dataUrl = cvs.toDataURL('image/jpeg', 0.95); URL.revokeObjectURL(url); loadImgUrl(dataUrl).then((img) => res({ img, dataUrl })); }; im.onerror = () => res(null); im.src = url; });
+}
+let layerTimer = 0;
+function saveLayers() {
+  if (!info) return; clearTimeout(layerTimer); const kind = info.kind;
+  layerTimer = setTimeout(() => kvSet('layer/' + kind, { bone: boneRefData, flesh: fleshRefData, atlas: boneAtlas ? { dataUrl: boneAtlas.dataUrl, layout: boneAtlas.layout, src: boneAtlas.src } : null }), 400);
+}
+async function restoreLayers(r) {
+  boneRef = fleshRef = null; boneRefData = fleshRefData = null; boneAtlas = null; boneRemoved = fleshRemoved = false; layerVer++;
+  if (!r) return;
+  if (r.bone) { boneRefData = r.bone; boneRef = await loadImgUrl(r.bone); }
+  if (r.flesh) { fleshRefData = r.flesh; fleshRef = await loadImgUrl(r.flesh); }
+  if (r.atlas && r.atlas.dataUrl) boneAtlas = { dataUrl: r.atlas.dataUrl, layout: r.atlas.layout, src: r.atlas.src || 'import', img: await loadImgUrl(r.atlas.dataUrl) };
+}
+async function loadLayers(kind) { await restoreLayers(await kvGet('layer/' + kind)); }
+const layerImg = (which) => (which === 'bone' ? boneRef : fleshRef);
+
+// --- Knochen-Infos aus dem Spiel (nur Lesen) ---
+function askBoneInfo() {
+  if (!EMB) return Promise.resolve(null);
+  return new Promise((res) => { const id = 'bi' + Math.random().toString(36).slice(2); const h = (e) => { const d = e.data; if (!d || !d.zdFormBoneInfo || d.id !== id) return; window.removeEventListener('message', h); clearTimeout(t); res(d.bones); }; const t = setTimeout(() => { window.removeEventListener('message', h); res(null); }, 8000); window.addEventListener('message', h); post({ zdForm: 'boneinfo', kind: info.kind, id, data: currentData() }); });
+}
+// --- Aufteilung (Regalpackung): feste Reihenfolge -> immer dieselbe Aufteilung bei gleicher Figur ---
+function packItems(items, gap) {
+  const sorted = items.slice().sort((a, b) => b.h - a.h || (a.name < b.name ? -1 : 1));
+  const area = sorted.reduce((s, i) => s + (i.w + gap) * (i.h + gap), 0), maxW = Math.max(...sorted.map((i) => i.w)) + gap;
+  const W = Math.max(maxW, Math.ceil(Math.sqrt(area * 1.25)));
+  let x = 0, y = 0, rowH = 0; const pos = {};
+  for (const it of sorted) { if (x > 0 && x + it.w > W) { x = 0; y += rowH + gap; rowH = 0; } pos[it.name] = [x, y]; x += it.w + gap; rowH = Math.max(rowH, it.h); }
+  return { pos, W: Math.max(W - gap, 1), H: y + rowH };
+}
+function atlasLayout(bi) {
+  for (const ppc of PPCS) {
+    const items = bi.map((b) => ({ name: b.name, w: Math.ceil((b.box[2] - b.box[0] + 2 * ATLAS_PAD) * ppc), h: Math.ceil((b.box[3] - b.box[1] + 2 * ATLAS_PAD) * ppc) }));
+    const p = packItems(items, 4);
+    if ((p.W <= 4096 && p.H <= 4096) || ppc === PPCS[PPCS.length - 1]) {
+      const bones = {};
+      for (const b of bi) { const it = items.find((q) => q.name === b.name); bones[b.name] = { x: p.pos[b.name][0], y: p.pos[b.name][1], w: it.w, h: it.h, bx: Math.round((b.box[0] - ATLAS_PAD) * 1000) / 1000, by: Math.round((b.box[1] - ATLAS_PAD) * 1000) / 1000, bw: it.w / ppc, bh: it.h / ppc }; }
+      return { v: 1, kind: info.kind, ppc, W: p.W, H: p.H, bones };
+    }
+  }
+}
+function boneMask(g, b, R, ppc) { g.beginPath(); for (const t of b.tris) { g.moveTo((t[0] - R.bx) * ppc, (t[1] - R.by) * ppc); g.lineTo((t[2] - R.bx) * ppc, (t[3] - R.by) * ppc); g.lineTo((t[4] - R.bx) * ppc, (t[5] - R.by) * ppc); g.closePath(); } }
+// Bild (an Referenzbild ausgerichtet) -> Ausschnitt eines Knochens in dessen eigener Lage (aufrecht)
+function drawBoneCrop(g, b, R, ppc, img) {
+  const a = aligns[info.kind + '/' + ($('solo').checked ? b.group : 'all')]; if (!a || !ref) return false;
+  const k = S0 * a.s, r = (a.r * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r);
+  const m = [co / k, -si / k, si / k, co / k, (-a.tx * co - a.ty * si) / k, (a.tx * si - a.ty * co) / k];   // Bild -> cm
+  const cs = Math.cos(b.ang), sn = Math.sin(b.ang), toLocal = [cs, -sn, sn, cs, -(cs * b.cx + sn * b.cy), sn * b.cx - cs * b.cy];   // cm -> Knochen-lokal
+  const t = mmul([ppc, 0, 0, ppc, -R.bx * ppc, -R.by * ppc], mmul(toLocal, m));
+  const tmp = document.createElement('canvas'); tmp.width = R.w; tmp.height = R.h; const tg = tmp.getContext('2d');
+  tg.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]); tg.drawImage(img, 0, 0, ref.width, ref.height);
+  const mk = document.createElement('canvas'); mk.width = R.w; mk.height = R.h; const mg = mk.getContext('2d'); boneMask(mg, b, R, ppc); mg.fillStyle = '#000'; mg.fill(); mg.lineWidth = 3; mg.lineJoin = 'round'; mg.strokeStyle = '#000'; mg.stroke();
+  tg.setTransform(1, 0, 0, 1, 0, 0); tg.globalCompositeOperation = 'destination-in'; tg.drawImage(mk, 0, 0);
+  g.drawImage(tmp, R.x, R.y); return true;
+}
+function drawBoneVector(g, b, R, ppc) {
+  g.save(); g.translate(R.x, R.y);
+  for (let layer = 0; layer < 5; layer++) for (const t of b.tris) { if (t[9] !== layer) continue; g.fillStyle = `rgb(${t[6]},${t[7]},${t[8]})`; g.beginPath(); g.moveTo((t[0] - R.bx) * ppc, (t[1] - R.by) * ppc); g.lineTo((t[2] - R.bx) * ppc, (t[3] - R.by) * ppc); g.lineTo((t[4] - R.bx) * ppc, (t[5] - R.by) * ppc); g.closePath(); g.fill(); }
+  g.restore();
+}
+async function buildBoneAtlas(useImage) {
+  if (!info) return null;
+  const bi = await askBoneInfo(); if (!bi || !bi.length) { draftNote = '⚠ Die Knochenliste kam nicht aus dem Spiel (nur im eingebetteten Editor möglich). '; draw(); return null; }
+  const layout = atlasLayout(bi), cvs = document.createElement('canvas'); cvs.width = layout.W; cvs.height = layout.H; const g = cvs.getContext('2d');
+  let fromImg = 0, vec = 0; const img = useImage ? boneRef : null;
+  for (const b of bi) { const R = layout.bones[b.name]; if (img && drawBoneCrop(g, b, R, layout.ppc, img)) fromImg++; else { drawBoneVector(g, b, R, layout.ppc); vec++; } }
+  const dataUrl = cvs.toDataURL('image/png');
+  boneAtlas = { dataUrl, layout, src: img ? 'bild' : 'vektor', img: await loadImgUrl(dataUrl) }; layerVer++; saveLayers(); schedulePreview();
+  return { fromImg, vec, n: bi.length };
+}
+// --- Datei ausgeben (Browser-Download oder APK-Teilen) ---
+function saveOut(name, payload, mime) {
+  return new Promise((resolve) => {
+    const isText = typeof payload === 'string';
+    const finish = () => { const blob = isText ? new Blob([payload], { type: mime }) : payload; const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); resolve(); };
+    if (!EMB) return finish();
+    const send = (extra) => { let got = false; const h = (e) => { const d = e.data; if (!d || !d.zdFormSaved) return; got = true; if (d.ack) return; window.removeEventListener('message', h); if (d.native === false) finish(); else { draftNote = d.ok ? `Gesendet: ${name} – im Teilen-Dialog „Dateien“/Drive wählen. ` : `⚠ Speichern fehlgeschlagen: ${d.msg || 'unbekannt'}. `; draw(); resolve(); } }; window.addEventListener('message', h); post({ zdForm: 'saveFile', name, ...extra }); setTimeout(() => { if (!got) { window.removeEventListener('message', h); finish(); } }, 2500); };
+    if (isText) send({ text: payload });
+    else { const fr = new FileReader(); fr.onload = () => send({ b64: String(fr.result).split(',')[1] || '' }); fr.readAsDataURL(payload); }
+  });
+}
+const dataUrlBlob = (u) => { const [h, b] = u.split(','), mime = /:(.*?);/.exec(h)[1], bin = atob(b), n = bin.length, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: mime }); };
+function showCarpet() {
+  if (!boneAtlas) return; $('carpetImg').src = boneAtlas.dataUrl;
+  $('carpetInfo').textContent = `${Object.keys(boneAtlas.layout.bones).length} Knochen · ${boneAtlas.layout.W}×${boneAtlas.layout.H} px · Maßstab ${boneAtlas.layout.ppc} px/cm (alle gleich) · Quelle: ${boneAtlas.src === 'bild' ? 'Knochen-Bild' : boneAtlas.src === 'import' ? 'Import' : 'Zeichnung'}. Die Knochen im Editor und im Spiel bleiben, wo sie sind – nur die Textur liegt hier so.`;
+  $('carpet').classList.add('open');
+}
+function boneUi() { $('boneInfo').textContent = boneAtlas ? `Teppich: ${boneAtlas.src === 'bild' ? 'aus Knochen-Bild' : boneAtlas.src === 'import' ? 'importiert' : 'Zeichnung'} (${Object.keys(boneAtlas.layout.bones).length} Knochen)` : 'Noch kein Knochen-Bild.'; $('fleshInfo').textContent = fleshRef ? 'Fleisch-Bild geladen.' : 'Noch kein Fleisch-Bild.'; }
+$('boneFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await readImageFile(f); if (!r) return; boneRef = r.img; boneRefData = r.dataUrl; boneRemoved = false; layerVer++; const n = await buildBoneAtlas(true); draftNote = n ? `Knochen-Bild geladen: ${n.fromImg} von ${n.n} Knochen aus dem Bild${n.vec ? `, ${n.vec} ohne Ausrichtung (Zeichnung)` : ''}. „Übernehmen“ legt es fest. ` : ''; saveLayers(); boneUi(); draw(); };
+$('boneFromImg').onclick = async () => { if (!boneRef) { draftNote = 'Zuerst ein Knochen-Bild laden. '; draw(); return; } const n = await buildBoneAtlas(true); if (n) draftNote = `Neu aus dem Bild: ${n.fromImg} von ${n.n} Knochen. `; boneUi(); draw(); };
+$('boneRm').onclick = () => { boneRef = null; boneRefData = null; boneAtlas = null; boneRemoved = true; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Knochen-Bild entfernt (Spiel nutzt wieder die Zeichnung, sobald du „Übernehmen“ drückst). '; draw(); };
+$('boneSpread').onclick = async () => { if (boneAtlas && boneAtlas.src === 'import' && !confirm('Der importierte Teppich wird durch eine neue Aufteilung ersetzt. Fortfahren?')) return; const n = await buildBoneAtlas(!!boneRef); if (n) { draftNote = `Proportional verteilt: ${n.n} Knochen. `; showCarpet(); } boneUi(); draw(); };
+$('bonePrint').onclick = async () => { if (!boneAtlas) { const n = await buildBoneAtlas(!!boneRef); if (!n) return; } showCarpet(); await saveOut(`knochen-teppich-${info.kind}.png`, dataUrlBlob(boneAtlas.dataUrl), 'image/png'); await saveOut(`knochen-teppich-${info.kind}.json`, JSON.stringify(boneAtlas.layout), 'application/json'); boneUi(); };
+$('boneLayout').onclick = async () => { if (!boneAtlas) { const n = await buildBoneAtlas(!!boneRef); if (!n) return; } await saveOut(`knochen-teppich-${info.kind}.json`, JSON.stringify(boneAtlas.layout), 'application/json'); };
+$('carpetPng').onclick = () => $('bonePrint').onclick(); $('carpetJson').onclick = () => $('boneLayout').onclick(); $('carpetClose').onclick = () => $('carpet').classList.remove('open');
+$('boneImp').onchange = async (e) => {
+  const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
+  const png = files.find((f) => /^image\//.test(f.type) || /\.(png|jpe?g|webp)$/i.test(f.name)), js = files.find((f) => /json/.test(f.type) || /\.json$/i.test(f.name));
+  if (!png) { draftNote = '⚠ Bitte das bemalte Teppich-Bild (PNG) mit auswählen, am besten zusammen mit der Layout-Datei (JSON). '; draw(); return; }
+  const dataUrl = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(png); });
+  const im = await loadImgUrl(dataUrl); if (!im) { draftNote = '⚠ Das Bild konnte nicht gelesen werden. '; draw(); return; }
+  let layout = null;
+  if (js) { try { layout = JSON.parse(await js.text()); } catch (er) { layout = null; } }
+  if (!layout || !layout.bones) {
+    const bi = await askBoneInfo(); if (bi) { const l = atlasLayout(bi); if (l.W === im.width && l.H === im.height) layout = l; }
+    if (!layout) { draftNote = '⚠ Layout-Datei (JSON) fehlt oder passt nicht zur Figur. Bitte zusammen mit dem Bild importieren. '; draw(); return; }
+  }
+  const sx = im.width / layout.W, sy = im.height / layout.H;   // erlaubt anderes Auflösungsmaß (z. B. doppelt so groß bemalt)
+  if (Math.abs(sx - sy) > 0.01) { draftNote = '⚠ Bildformat passt nicht zum Layout (Seitenverhältnis). Nicht beschneiden oder strecken. '; draw(); return; }
+  if (layout.kind && layout.kind !== info.kind) { draftNote = `⚠ Das Layout gehört zur Figur „${layout.kind}“. `; draw(); return; }
+  boneAtlas = { dataUrl, layout, src: 'import', img: im }; boneRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = `Teppich importiert (${Object.keys(layout.bones).length} Knochen). „Übernehmen“ legt ihn fest. `; draw();
+};
+$('fleshFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; const r = await readImageFile(f); if (!r) return; fleshRef = r.img; fleshRefData = r.dataUrl; fleshRemoved = false; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Fleisch-Bild geladen (gleiche Ausrichtung wie das Referenzbild). „Übernehmen“ legt es fest. '; draw(); };
+$('fleshRm').onclick = () => { fleshRef = null; fleshRefData = null; fleshRemoved = true; layerVer++; saveLayers(); schedulePreview(); boneUi(); draftNote = 'Fleisch-Bild entfernt. '; draw(); };
+// --- Drucken: Haut / Fleisch (je Körperteil, in gemeinsamem Maßstab auf ein Bild) ---
+async function printLayer(which) {
+  const img = which === 'skin' ? ref : fleshRef, tint = which === 'skin' ? '#d8b9a3' : '#a85a50', items = [], cvsList = {}, PP = 14;
+  for (const [p] of PARTS) { const bb = bboxOf(work[p]), w = Math.ceil((bb[2] - bb[0] + 1.6) * PP), h = Math.ceil((bb[3] - bb[1] + 1.6) * PP); items.push({ name: p, w, h, ox: bb[0] - 0.8, oy: bb[1] - 0.8 }); }
+  const pk = packItems(items, 6), sheet = document.createElement('canvas'); sheet.width = pk.W; sheet.height = pk.H; const g = sheet.getContext('2d');
+  for (const it of items) {
+    const [x, y] = pk.pos[it.name], a = aligns[info.kind + '/' + ($('solo').checked ? it.name : 'all')], t = document.createElement('canvas'); t.width = it.w; t.height = it.h; const tg = t.getContext('2d');
+    tg.fillStyle = tint; tg.fillRect(0, 0, it.w, it.h);
+    if (img && a && ref) { const k = S0 * a.s, r = (a.r * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r), m = [co / k, -si / k, si / k, co / k, (-a.tx * co - a.ty * si) / k, (a.tx * si - a.ty * co) / k], q = [PP, 0, 0, PP, -it.ox * PP, -it.oy * PP], tt = mmul(q, m); tg.setTransform(tt[0], tt[1], tt[2], tt[3], tt[4], tt[5]); tg.drawImage(img, 0, 0, ref.width, ref.height); tg.setTransform(1, 0, 0, 1, 0, 0); }
+    tg.globalCompositeOperation = 'destination-in'; tg.beginPath(); work[it.name].forEach(([px, py], i) => { const sx = (px - it.ox) * PP, sy = (py - it.oy) * PP; i ? tg.lineTo(sx, sy) : tg.moveTo(sx, sy); }); tg.closePath(); tg.fillStyle = '#000'; tg.fill();
+    g.drawImage(t, x, y);
+  }
+  await saveOut(`${which === 'skin' ? 'haut' : 'fleisch'}-${info.kind}.png`, await new Promise((res) => sheet.toBlob(res, 'image/png')), 'image/png');
+  draftNote = `${which === 'skin' ? 'Haut' : 'Fleisch'} gedruckt: alle 5 Körperteile in gleichem Maßstab auf einem Bild (${pk.W}×${pk.H}). `; draw();
+}
+$('skinPrint').onclick = () => printLayer('skin'); $('fleshPrint').onclick = () => printLayer('flesh');
+
 // ---------- Zeichnen ----------
 let raf = 0;
 function draw() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; paint(); }); }
@@ -848,7 +1022,7 @@ function path(poly) { c.beginPath(); poly.forEach(([x, y], i) => { const [sx, sy
 const depthOf = (n) => { let d = 0, b = BN[n]; while (b && b.parent) { d++; b = BN[b.parent]; } return d; };
 function paint() {
   c.setTransform(dpr, 0, 0, dpr, 0, 0); c.fillStyle = '#0c0909'; c.fillRect(0, 0, cw, ch);
-  if (ref) { c.globalAlpha = +$('alpha').value; c.drawImage(ref, view.px, view.py, ref.width * view.z, ref.height * view.z); c.globalAlpha = 1; }
+  if (ref) { const under = mode === 'tbone' && boneRef ? boneRef : mode === 'tflesh' && fleshRef ? fleshRef : ref; c.globalAlpha = +$('alpha').value; c.drawImage(under, view.px, view.py, ref.width * view.z, ref.height * view.z); c.globalAlpha = 1; }
   if (!info) { c.fillStyle = '#6a5a5a'; c.font = '15px system-ui'; c.textAlign = 'center'; c.fillText('Lädt …', cw / 2, ch / 2); return; }
   const part = $('part').value, solo = $('solo').checked;
   if ($('showSkin').checked && ref) {
@@ -859,11 +1033,11 @@ function paint() {
     c.globalAlpha = 1; c.drawImage(r.cvs, r.ox, r.oy, r.bw, r.bh); c.restore();
   }
   const subs = sel ? ($('withKids').checked ? subtree(sel) : new Set([sel])) : null;
-  if ($('showBones').checked || mode === 'bone') {
+  if ($('showBones').checked || mode === 'bone' || mode === 'tbone') {
     for (let layer = 0; layer < 5; layer++) for (const b of info.bones) {
       if (solo && b.group !== part) continue;
       const hl = subs && subs.has(b.name);
-      c.globalAlpha = mode === 'bone' ? 0.85 : mode === 'organ' ? 0.3 : 0.5;
+      c.globalAlpha = mode === 'bone' ? 0.85 : mode === 'tbone' ? 0.35 : mode === 'organ' ? 0.3 : 0.5;
       for (const t of b.tris) {
         if (t[9] !== layer) continue;
         const a = bp(b, t[0], t[1]), bb = bp(b, t[2], t[3]), cc = bp(b, t[4], t[5]);
@@ -912,7 +1086,7 @@ function paint() {
   const hintOrg = !selOrg ? 'Innerei antippen oder oben wählen. ' : orgAct === 'move' ? `${selOrg}: ziehen = verschieben. ` : orgAct === 'rot' ? `${selOrg}: ziehen = um die Mitte drehen. ` : `${selOrg}: ziehen = größer/kleiner (${$('oLen').checked && $('oWid').checked ? 'gleichmäßig' : $('oLen').checked ? 'nur Länge' : $('oWid').checked ? 'nur Breite' : 'nichts gewählt'}). `;
   const lw = $('kLen').checked && $('kWid').checked ? '' : $('kLen').checked ? ' (nur Länge)' : $('kWid').checked ? ' (nur Breite)' : ' (nichts gewählt)';
   const hintBone = !$('allowBones').checked ? 'Knochen gesperrt: im Menü „Knochen verschiebbar“ einschalten. ' : !sel ? 'Knochen antippen oder oben wählen. ' : boneAct === 'span' ? `${sel}: Startpunkt antippen, zum Endpunkt ziehen (nur dieser Knochen). Anderen Knochen wählen: Strg/Umschalt+Klick oder kurz mit zwei Fingern tippen. ` : boneAct === 'move' ? `${sel}: ziehen = verschieben${kids}. ` : boneAct === 'rot' ? `${sel}: ziehen = um den Ring drehen${kids}. ` : boneAct === 'scale' ? `${sel}: ziehen = größer/kleiner (vom Ring aus)${lw}${kids}. ` : `${sel}: ${nl} Fäden. Punkt antippen = Faden lösen/setzen. `;
-  $('status').textContent = draftNote + (mode === 'align' ? 'Ausrichten: ziehen = Ebene schieben; Pfeile fein. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : mode === 'organ' ? hintOrg : hintBone) + (out.length ? `Rot: ${out.length} Knochen-/Organpunkte ragen aus der Haut.` : '');
+  $('status').textContent = draftNote + (mode === 'tbone' ? 'Knochen-Bild: Ansicht verschieben/zoomen. Hier wird nichts an den Knochen verändert. ' : mode === 'tflesh' ? 'Fleisch-Bild: Ansicht verschieben/zoomen. Hier wird nichts an der Figur verändert. ' : mode === 'align' ? 'Ausrichten: ziehen = Ebene schieben; Pfeile fein. ' : mode === 'form' ? 'Form: Punkte ziehen, Linie antippen = neuer Punkt, Doppeltipp = löschen. ' : mode === 'organ' ? hintOrg : hintBone) + (out.length ? `Rot: ${out.length} Knochen-/Organpunkte ragen aus der Haut.` : '');
   $('alignInfo').textContent = `Maßstab ${(align.s / align.s0 * 100).toFixed(1)}% · Drehung ${align.r.toFixed(2)}°`;
   $('arot').value = Math.max(-180, Math.min(180, align.r)); 
 }
@@ -1047,13 +1221,14 @@ cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pos(e); (mod
 
 function setMode(m) {
   asstStop(); clearSel(); mode = m; setTimeout(showJointRow, 0); if (m === 'organ' && $('part').value !== 'torso') { $('part').value = 'torso'; dirty = true; fitAlign(); }
-  for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone'], ['mOrgan', 'organ']]) $(id).classList.toggle('sel', m === mm);
+  for (const [id, mm] of [['mAlign', 'align'], ['mForm', 'form'], ['mBone', 'bone'], ['mOrgan', 'organ'], ['mTBone', 'tbone'], ['mTFlesh', 'tflesh']]) $(id).classList.toggle('sel', m === mm);
+  $('tboneRows').style.display = m === 'tbone' ? '' : 'none'; $('tfleshRows').style.display = m === 'tflesh' ? '' : 'none'; boneUi();
   $('alignRows').style.display = m === 'align' ? '' : 'none'; $('formRows').style.display = m === 'form' ? '' : 'none'; $('boneRows').style.display = m === 'bone' ? '' : 'none'; $('organRows').style.display = m === 'organ' ? '' : 'none';
   $('alignSliders').style.display = m === 'align' ? '' : 'none'; resize();
 }
 function setAct(a) { boneAct = a; hoverJoint = null; if (a !== 'joint') selJoint = null; for (const [id, aa] of [['bMove', 'move'], ['bRot', 'rot'], ['bScale', 'scale'], ['bJoint', 'joint'], ['bSpan', 'span'], ['bLink', 'link']]) $(id).classList.toggle('sel', a === aa); $('kScale').style.display = a === 'scale' ? '' : 'none'; showJointRow(); draw(); }
 function setOrgAct(a) { orgAct = a; for (const [id, aa] of [['oMove', 'move'], ['oRot', 'rot'], ['oScale', 'scale']]) $(id).classList.toggle('sel', a === aa); $('oScaleOpts').style.display = a === 'scale' ? '' : 'none'; draw(); }
-$('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone'); $('mOrgan').onclick = () => setMode('organ');
+$('mAlign').onclick = () => setMode('align'); $('mForm').onclick = () => setMode('form'); $('mBone').onclick = () => setMode('bone'); $('mOrgan').onclick = () => setMode('organ'); $('mTBone').onclick = () => setMode('tbone'); $('mTFlesh').onclick = () => setMode('tflesh');
 $('oMove').onclick = () => setOrgAct('move'); $('oRot').onclick = () => setOrgAct('rot'); $('oScale').onclick = () => setOrgAct('scale');
 $('orgSel').onchange = () => { selOrg = $('orgSel').value || null; draw(); };
 $('resetOrgans').onclick = () => { if (isDone('torso')) return flashLocked(); pushUndo(); O = {}; selOrg = null; changed(); };
@@ -1107,6 +1282,11 @@ $('apply').onclick = async () => {
   if (resetSkins) { for (const [p] of PARTS) await kvDel(`skin/${kind}/${p}`); resetSkins = false; }
   let made = [];
   if ($('useRef').checked && ref) for (const [p, l] of PARTS) { const key = kind + '/' + ($('solo').checked ? p : 'all'); if (!touched[key]) continue; const sk = genSkin(p); if (sk) { await kvSet(`skin/${kind}/${p}`, sk); made.push(l); } }
+  // Fleisch-Bild und Knochen-Teppich festschreiben (nur Grafik)
+  for (const [p] of PARTS) { const key = kind + '/' + ($('solo').checked ? p : 'all'); if (fleshRef && ref && aligns[key]) { const r = skinCanvas(p, aligns[key], fleshRef); await kvSet(`flesh/${kind}/${p}`, { dataUrl: r.cvs.toDataURL('image/jpeg', 0.92), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] }); } else if (fleshRemoved) await kvDel(`flesh/${kind}/${p}`); }
+  fleshRemoved = false;
+  if (boneAtlas) await kvSet(`bonetex/${kind}`, { dataUrl: boneAtlas.dataUrl, layout: boneAtlas.layout }); else if (boneRemoved) await kvDel(`bonetex/${kind}`);
+  boneRemoved = false;
   post({ zdForm: 'save', kind, data }); saveDraft();
 };
 $('close').onclick = () => post({ zdForm: 'close' });
@@ -1119,7 +1299,7 @@ function post(m) { if (EMB) window.parent.postMessage(m, '*'); }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormInfo) return; if (d.error) { $('taInfo').textContent = d.error; return; } setInfo(d).then(() => $('ovl').classList.remove('open')); });
 // ---------- Vorschau-Fenster (Echtzeit-Ergebnis aus dem Spiel) ----------
 let pvBitmap = null, pvBusy = false, pvTimer = 0, pvDirty = false, pvView = { z: 1, x: 0, y: 0 }, pvBig = false, pvSent = null;
-const pvc = $('pvc'), pvx = pvc.getContext('2d'), pvSkins = {}, pvKeys = {};
+const pvc = $('pvc'), pvx = pvc.getContext('2d'), pvSkins = {}, pvKeys = {}, pvFlesh = {}, pvFleshKeys = {}; let pvBoneSent = -1;
 function pvResize() { const w = $('pv').clientWidth, h = $('pv').clientHeight, d = window.devicePixelRatio || 1; const nw = Math.max(10, Math.round(w * d)), nh = Math.max(10, Math.round(h * d)); if (nw !== pvc.width || nh !== pvc.height) { pvc.width = nw; pvc.height = nh; schedulePreview(); } pvPaint(); }
 // pvBitmap = { img, W, H, z, x, y, q }: Bild wurde für diese Ansicht (Zoom z, Verschiebung x/y in Zeichenflächen-Pixeln) scharf gerendert (q = Bild-Pixel je Zeichenflächen-Pixel)
 function pvPaint() {
@@ -1134,7 +1314,10 @@ function sendPreview() {
   const skins = {};
   if ($('useRef').checked && ref) for (const [p] of PARTS) { const key = info.kind + '/' + ($('solo').checked ? p : 'all'); if (!touched[key] || !aligns[key]) continue; const ck = JSON.stringify([aligns[key], work[p]]); if (pvKeys[p] !== ck) { const r = skinCanvas(p, aligns[key]), sc = Math.min(1, 512 / Math.max(r.cvs.width, r.cvs.height)), t = document.createElement('canvas'); t.width = Math.round(r.cvs.width * sc); t.height = Math.round(r.cvs.height * sc); t.getContext('2d').drawImage(r.cvs, 0, 0, t.width, t.height); pvSkins[p] = { dataUrl: t.toDataURL('image/jpeg', 0.85), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] }; pvKeys[p] = ck; } skins[p] = pvSkins[p]; }
   const q = Math.min(1, 1800 / Math.max(pvc.width, pvc.height)); pvSent = { z: pvView.z, x: pvView.x, y: pvView.y, q, W: Math.round(pvc.width * q), H: Math.round(pvc.height * q) };
-  post({ zdForm: 'preview', kind: info.kind, data: currentData(), skins, w: pvSent.W, h: pvSent.H, view: { z: pvView.z, x: pvView.x * q, y: pvView.y * q } });
+  const flesh = {};
+  if (fleshRef && ref) for (const [p] of PARTS) { const key = info.kind + '/' + ($('solo').checked ? p : 'all'); if (!aligns[key]) continue; const ck = JSON.stringify([aligns[key], work[p], layerVer]); if (pvFleshKeys[p] !== ck) { const r = skinCanvas(p, aligns[key], fleshRef), sc = Math.min(1, 512 / Math.max(r.cvs.width, r.cvs.height)), t = document.createElement('canvas'); t.width = Math.round(r.cvs.width * sc); t.height = Math.round(r.cvs.height * sc); t.getContext('2d').drawImage(r.cvs, 0, 0, t.width, t.height); pvFlesh[p] = { dataUrl: t.toDataURL('image/jpeg', 0.85), fit: [r.ox * CMPX, r.oy * CMPX, (r.ox + r.bw) * CMPX, (r.oy + r.bh) * CMPX] }; pvFleshKeys[p] = ck; } flesh[p] = pvFlesh[p]; }
+  const boneMsg = pvBoneSent !== layerVer ? { bone: boneAtlas ? { dataUrl: boneAtlas.dataUrl, layout: boneAtlas.layout } : null } : {}; pvBoneSent = layerVer;
+  post({ zdForm: 'preview', kind: info.kind, data: currentData(), skins, flesh, ...boneMsg, w: pvSent.W, h: pvSent.H, view: { z: pvView.z, x: pvView.x * q, y: pvView.y * q } });
   setTimeout(() => { if (pvBusy) { pvBusy = false; if (pvDirty) schedulePreview(); } }, 6000);
 }
 window.addEventListener('message', (e) => { const d = e.data; if (!d || !d.zdFormPreview) return; pvBusy = false; if (d.bitmap && pvSent) { pvBitmap = { img: d.bitmap, W: pvSent.W, H: pvSent.H, z: pvSent.z, x: pvSent.x, y: pvSent.y, q: pvSent.q }; pvPaint(); } if (pvDirty) schedulePreview(); });
