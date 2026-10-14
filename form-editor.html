@@ -917,34 +917,42 @@ function packItems(items, gap) {
 }
 function atlasLayout(bi) {
   for (const ppc of PPCS) {
-    const items = bi.map((b) => ({ name: b.name, w: Math.ceil((b.box[2] - b.box[0] + 2 * ATLAS_PAD) * ppc), h: Math.ceil((b.box[3] - b.box[1] + 2 * ATLAS_PAD) * ppc) }));
+    const items = bi.map((b) => { const bw0 = b.box[2] - b.box[0] + 2 * ATLAS_PAD, bh0 = b.box[3] - b.box[1] + 2 * ATLAS_PAD, r = (((Math.round(b.ang / (Math.PI / 2)) % 4) + 4) % 4), odd = r % 2 === 1; return { name: b.name, r, w: Math.ceil((odd ? bh0 : bw0) * ppc), h: Math.ceil((odd ? bw0 : bh0) * ppc) }; });
     const p = packItems(items, 4);
     if ((p.W <= 4096 && p.H <= 4096) || ppc === PPCS[PPCS.length - 1]) {
       const bones = {};
-      for (const b of bi) { const it = items.find((q) => q.name === b.name); bones[b.name] = { x: p.pos[b.name][0], y: p.pos[b.name][1], w: it.w, h: it.h, bx: Math.round((b.box[0] - ATLAS_PAD) * 1000) / 1000, by: Math.round((b.box[1] - ATLAS_PAD) * 1000) / 1000, bw: it.w / ppc, bh: it.h / ppc }; }
-      return { v: 1, kind: info.kind, ppc, W: p.W, H: p.H, bones };
+      for (const b of bi) { const it = items.find((q) => q.name === b.name); const odd = it.r % 2 === 1; bones[b.name] = { x: p.pos[b.name][0], y: p.pos[b.name][1], w: it.w, h: it.h, r: it.r, bx: Math.round((b.box[0] - ATLAS_PAD) * 1000) / 1000, by: Math.round((b.box[1] - ATLAS_PAD) * 1000) / 1000, bw: (odd ? it.h : it.w) / ppc, bh: (odd ? it.w : it.h) / ppc }; }
+      return { v: 2, kind: info.kind, ppc, W: p.W, H: p.H, bones };
     }
   }
 }
-function boneMask(g, b, R, ppc) { g.beginPath(); for (const t of b.tris) { g.moveTo((t[0] - R.bx) * ppc, (t[1] - R.by) * ppc); g.lineTo((t[2] - R.bx) * ppc, (t[3] - R.by) * ppc); g.lineTo((t[4] - R.bx) * ppc, (t[5] - R.by) * ppc); g.closePath(); } }
-// Bild (an Referenzbild ausgerichtet) -> Ausschnitt eines Knochens in dessen eigener Lage (aufrecht)
+// Knochen-lokale cm -> Teppich-Pixel (in Viertelschritten gedreht, damit z. B. der Schädel aufrecht liegt)
+function cellMat(R, ppc, ox = 0, oy = 0) {
+  const r = R.r || 0, k = ppc;
+  if (r === 1) return [0, k, -k, 0, ox + (R.bh + R.by) * k, oy - R.bx * k];
+  if (r === 2) return [-k, 0, 0, -k, ox + (R.bw + R.bx) * k, oy + (R.bh + R.by) * k];
+  if (r === 3) return [0, -k, k, 0, ox - R.by * k, oy + (R.bw + R.bx) * k];
+  return [k, 0, 0, k, ox - R.bx * k, oy - R.by * k];
+}
+function boneMaskCm(g, b) { g.beginPath(); for (const t of b.tris) { g.moveTo(t[0], t[1]); g.lineTo(t[2], t[3]); g.lineTo(t[4], t[5]); g.closePath(); } }
+// Bild (an Referenzbild ausgerichtet) -> Ausschnitt eines Knochens in dessen Teppich-Lage
 function drawBoneCrop(g, b, R, ppc, img) {
   const a = aligns[info.kind + '/' + ($('solo').checked ? b.group : 'all')]; if (!a || !ref) return false;
   const k = S0 * a.s, r = (a.r * Math.PI) / 180, co = Math.cos(r), si = Math.sin(r);
   const m = [co / k, -si / k, si / k, co / k, (-a.tx * co - a.ty * si) / k, (a.tx * si - a.ty * co) / k];   // Bild -> cm
   const cs = Math.cos(b.ang), sn = Math.sin(b.ang), toLocal = [cs, -sn, sn, cs, -(cs * b.cx + sn * b.cy), sn * b.cx - cs * b.cy];   // cm -> Knochen-lokal
-  const t = mmul([ppc, 0, 0, ppc, -R.bx * ppc, -R.by * ppc], mmul(toLocal, m));
+  const t = mmul(cellMat(R, ppc), mmul(toLocal, m));
   const tmp = document.createElement('canvas'); tmp.width = R.w; tmp.height = R.h; const tg = tmp.getContext('2d');
   tg.setTransform(t[0], t[1], t[2], t[3], t[4], t[5]); tg.drawImage(img, 0, 0, ref.width, ref.height);
-  const mk = document.createElement('canvas'); mk.width = R.w; mk.height = R.h; const mg = mk.getContext('2d'); boneMask(mg, b, R, ppc); mg.fillStyle = '#000'; mg.fill(); mg.lineWidth = 3; mg.lineJoin = 'round'; mg.strokeStyle = '#000'; mg.stroke();
+  const mk = document.createElement('canvas'); mk.width = R.w; mk.height = R.h; const mg = mk.getContext('2d'); const cmx = cellMat(R, ppc); mg.setTransform(cmx[0], cmx[1], cmx[2], cmx[3], cmx[4], cmx[5]); boneMaskCm(mg, b); mg.fillStyle = '#000'; mg.fill(); mg.lineWidth = 3 / ppc; mg.lineJoin = 'round'; mg.strokeStyle = '#000'; mg.stroke();
   tg.setTransform(1, 0, 0, 1, 0, 0); tg.globalCompositeOperation = 'destination-in'; tg.drawImage(mk, 0, 0);
   g.drawImage(tmp, R.x, R.y); return true;
 }
 function drawBoneVector(g, b, R, ppc) {
-  g.save(); g.translate(R.x, R.y);
-  for (let layer = 0; layer < 5; layer++) for (const t of b.tris) { if (t[9] !== layer) continue; g.fillStyle = `rgb(${t[6]},${t[7]},${t[8]})`; g.beginPath(); g.moveTo((t[0] - R.bx) * ppc, (t[1] - R.by) * ppc); g.lineTo((t[2] - R.bx) * ppc, (t[3] - R.by) * ppc); g.lineTo((t[4] - R.bx) * ppc, (t[5] - R.by) * ppc); g.closePath(); g.fill(); }
+  g.save(); const cmx = cellMat(R, ppc, R.x, R.y); g.setTransform(cmx[0], cmx[1], cmx[2], cmx[3], cmx[4], cmx[5]);
+  for (let layer = 0; layer < 5; layer++) for (const t of b.tris) { if (t[9] !== layer) continue; g.fillStyle = `rgb(${t[6]},${t[7]},${t[8]})`; g.beginPath(); g.moveTo(t[0], t[1]); g.lineTo(t[2], t[3]); g.lineTo(t[4], t[5]); g.closePath(); g.fill(); }
   g.strokeStyle = 'rgba(30,20,20,.9)'; g.lineCap = 'round';
-  for (const l of b.lines || []) { g.lineWidth = Math.max(1.5, l[4] * ppc / 8); g.beginPath(); g.moveTo((l[0] - R.bx) * ppc, (l[1] - R.by) * ppc); g.lineTo((l[2] - R.bx) * ppc, (l[3] - R.by) * ppc); g.stroke(); }
+  for (const l of b.lines || []) { g.lineWidth = Math.max(1.5, l[4] * ppc / 8) / ppc; g.beginPath(); g.moveTo(l[0], l[1]); g.lineTo(l[2], l[3]); g.stroke(); }
   g.restore();
 }
 async function buildBoneAtlas(useImage) {
