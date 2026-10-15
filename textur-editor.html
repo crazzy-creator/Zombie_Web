@@ -11,9 +11,9 @@
   header h1{font-size:15px;margin:0 8px 0 2px}
   button,select,label.btn{background:#2a2222;color:#ddd;border:1px solid #4a4040;border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer}
   button.sel,button.main{background:#7a1318;border-color:#c4373e;color:#fff}
-  main{flex:1;display:flex;gap:8px;padding:8px;min-height:0}
+  main{flex:1;display:flex;gap:8px;padding:8px;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .col{flex:1;display:flex;flex-direction:column;min-width:0;gap:6px}
-  .box{flex:1;min-height:0;background:#0c0909;border:1px solid #3a2e2e;border-radius:10px;position:relative;overflow:hidden}
+  .box{flex:1 0 auto;min-height:220px;background:#0c0909;border:1px solid #3a2e2e;border-radius:10px;position:relative;overflow:hidden}
   canvas{display:block;width:100%;height:100%;touch-action:none}
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
   input[type=range]{accent-color:#c4373e}
@@ -73,16 +73,16 @@ const OUT = {"torso":[[29,-238],[13,-233],[8,-228],[6,-222],[2,-217],[0,-212],[-
 const TARGETS = [
   ['wall_custom', 'Wand (Fläche) – eigene Textur', null],
   ['floor_custom', 'Boden (Fläche) – eigene Textur', null],
-  ['skin_torso', 'Haut: Rumpf + Kopf', 'torso'],
-  ['skin_armN', 'Haut: Arm (vorn)', 'armN'],
-  ['skin_armF', 'Haut: Arm (hinten)', 'armF'],
-  ['skin_beinN', 'Haut: Bein (vorn)', 'beinN'],
-  ['skin_beinF', 'Haut: Bein (hinten)', 'beinF'],
-  ['flesh_torso', 'Fleisch: Rumpf + Kopf', 'torso'],
-  ['flesh_armN', 'Fleisch: Arm (vorn)', 'armN'],
-  ['flesh_armF', 'Fleisch: Arm (hinten)', 'armF'],
-  ['flesh_beinN', 'Fleisch: Bein (vorn)', 'beinN'],
-  ['flesh_beinF', 'Fleisch: Bein (hinten)', 'beinF'],
+  // Innereien (Objekte): Textur wird einzeln über das Organ gelegt (Augapfel: Mitte = Pupille, nicht gekachelt)
+  ['organ_heart', 'Innereien: Herz', null],
+  ['organ_lung', 'Innereien: Lunge', null],
+  ['organ_liver', 'Innereien: Leber', null],
+  ['organ_stomach', 'Innereien: Magen', null],
+  ['organ_brain', 'Innereien: Gehirn', null],
+  ['organ_gut_small', 'Innereien: Dünndarm', null],
+  ['organ_gut_colon', 'Innereien: Dickdarm', null],
+  ['organ_eye', 'Innereien: Augapfel', null],
+  ['organ_eye_alien', 'Innereien: Augapfel (Alien, schwarz)', null],
 ];
 const $ = (id) => document.getElementById(id);
 const EMB = window.parent !== window;

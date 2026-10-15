@@ -1,0 +1,509 @@
+{
+ "skeleton_templates": {
+  "humanoid": "Mensch-Skelett (2 Arme, 2 Beine, Wirbelsäule, Schädel) – gibt es schon",
+  "quadruped": "Vierbeiner (Wirbelsäule waagerecht, 4 Beine, Schädel, Schwanz)",
+  "bird": "Zweibeiner/Vogel (2 Beine, Flügel statt Arme, Schnabel)",
+  "serpent": "Schlange/Wurm (nur Wirbelkette, keine Gliedmaßen)",
+  "insect": "Insekt (Kopf, Brust, Hinterleib, 6 Beine, Flügel optional)",
+  "arachnid": "Spinnentier (2 Teile, 8 Beine)",
+  "fish": "Fisch (Wirbelkette, Flossen, Schwanzflosse)",
+  "blob": "Weichtier (kein Knochen, nur Fleischnetz)"
+ },
+ "creatures": [
+  {
+   "id": "zombie",
+   "name": "Zombie",
+   "group": "Untote",
+   "skeleton": "humanoid",
+   "height_m": 1.75,
+   "status": "vorhanden",
+   "notes": "Standardfigur"
+  },
+  {
+   "id": "fat",
+   "name": "Fetter Zombie",
+   "group": "Untote",
+   "skeleton": "humanoid",
+   "height_m": 1.75,
+   "status": "vorhanden",
+   "notes": "dicker Bauch"
+  },
+  {
+   "id": "alien",
+   "name": "Alien",
+   "group": "Fantasie",
+   "skeleton": "humanoid",
+   "height_m": 1.6,
+   "status": "vorhanden",
+   "notes": "großer Schädel, schwarze Augen"
+  },
+  {
+   "id": "robot",
+   "name": "Roboter",
+   "group": "Maschine",
+   "skeleton": "humanoid",
+   "height_m": 1.8,
+   "status": "vorhanden",
+   "notes": "Metall, Zahnräder statt Innereien"
+  },
+  {
+   "id": "fat2",
+   "name": "Sehr fetter Zombie",
+   "group": "Untote",
+   "skeleton": "humanoid",
+   "height_m": 1.7,
+   "status": "geplant",
+   "notes": "Variante des fetten Zombies"
+  },
+  {
+   "id": "dog",
+   "name": "Hund",
+   "group": "Haustier",
+   "skeleton": "quadruped",
+   "height_m": 0.6,
+   "status": "erstellbar",
+   "notes": "Schwanz, hängende Ohren",
+   "quad": {
+    "legK": 1.25,
+    "depth": 36,
+    "snout": 6,
+    "snoutH": 9,
+    "ears": "floppy",
+    "tail": "long",
+    "thick": 0.7,
+    "headS": 0.9,
+    "skin": [
+     1.2,
+     0.9,
+     0.65
+    ],
+    "flesh": [
+     1.1,
+     0.8,
+     0.7
+    ]
+   }
+  },
+  {
+   "id": "cat",
+   "name": "Katze",
+   "group": "Haustier",
+   "skeleton": "quadruped",
+   "height_m": 0.25,
+   "status": "erstellbar",
+   "notes": "sehr beweglich, Schwanz",
+   "quad": {
+    "legK": 1.05,
+    "depth": 32,
+    "snout": 0,
+    "snoutH": 9,
+    "ears": "pointed",
+    "tail": "long",
+    "thick": 0.6,
+    "headS": 0.85,
+    "skin": [
+     1.25,
+     0.95,
+     0.7
+    ],
+    "flesh": [
+     1.1,
+     0.8,
+     0.7
+    ]
+   }
+  },
+  {
+   "id": "pig",
+   "name": "Schwein",
+   "group": "Nutztier",
+   "skeleton": "quadruped",
+   "height_m": 0.9,
+   "status": "vorhanden",
+   "notes": "dick, wenig Fell",
+   "quad": {
+    "legK": 1,
+    "depth": 44,
+    "snout": 0,
+    "snoutH": 14,
+    "ears": "small",
+    "tail": "curl",
+    "thick": 1,
+    "headS": 0.85,
+    "skin": [
+     1.45,
+     1.05,
+     1.05
+    ],
+    "flesh": [
+     1.15,
+     0.8,
+     0.8
+    ]
+   }
+  },
+  {
+   "id": "cow",
+   "name": "Kuh",
+   "group": "Nutztier",
+   "skeleton": "quadruped",
+   "height_m": 1.5,
+   "status": "erstellbar",
+   "notes": "schwer, Hörner, Euter",
+   "quad": {
+    "legK": 1.2,
+    "depth": 54,
+    "snout": 4,
+    "snoutH": 15,
+    "ears": "horns",
+    "tail": "long",
+    "thick": 1.1,
+    "headS": 1.0,
+    "skin": [
+     1.3,
+     1.25,
+     1.2
+    ],
+    "flesh": [
+     1.1,
+     0.8,
+     0.8
+    ]
+   }
+  },
+  {
+   "id": "horse",
+   "name": "Pferd",
+   "group": "Nutztier",
+   "skeleton": "quadruped",
+   "height_m": 1.6,
+   "status": "erstellbar",
+   "notes": "lange Beine, Mähne",
+   "quad": {
+    "legK": 1.9,
+    "depth": 40,
+    "snout": 14,
+    "snoutH": 11,
+    "ears": "pointed",
+    "tail": "bushy",
+    "thick": 0.8,
+    "headS": 0.9,
+    "skin": [
+     1.15,
+     0.8,
+     0.55
+    ],
+    "flesh": [
+     1.0,
+     0.7,
+     0.65
+    ]
+   }
+  },
+  {
+   "id": "sheep",
+   "name": "Schaf",
+   "group": "Nutztier",
+   "skeleton": "quadruped",
+   "height_m": 0.8,
+   "status": "erstellbar",
+   "notes": "Wolle",
+   "quad": {
+    "legK": 1.0,
+    "depth": 48,
+    "snout": 2,
+    "snoutH": 11,
+    "ears": "floppy",
+    "tail": "short",
+    "thick": 0.8,
+    "headS": 0.85,
+    "skin": [
+     1.45,
+     1.4,
+     1.35
+    ],
+    "flesh": [
+     1.1,
+     0.85,
+     0.8
+    ]
+   }
+  },
+  {
+   "id": "wolf",
+   "name": "Wolf",
+   "group": "Wildtier",
+   "skeleton": "quadruped",
+   "height_m": 0.8,
+   "status": "erstellbar",
+   "notes": "wie Hund, schlanker",
+   "quad": {
+    "legK": 1.4,
+    "depth": 34,
+    "snout": 10,
+    "snoutH": 9,
+    "ears": "pointed",
+    "tail": "bushy",
+    "thick": 0.75,
+    "headS": 0.95,
+    "skin": [
+     0.95,
+     0.95,
+     1.0
+    ],
+    "flesh": [
+     0.95,
+     0.75,
+     0.75
+    ]
+   }
+  },
+  {
+   "id": "bear",
+   "name": "Bär",
+   "group": "Wildtier",
+   "skeleton": "quadruped",
+   "height_m": 1.4,
+   "status": "erstellbar",
+   "notes": "sehr schwer, Pranken",
+   "quad": {
+    "legK": 1.0,
+    "depth": 56,
+    "snout": 6,
+    "snoutH": 13,
+    "ears": "small",
+    "tail": "short",
+    "thick": 1.4,
+    "headS": 1.0,
+    "skin": [
+     0.7,
+     0.55,
+     0.45
+    ],
+    "flesh": [
+     0.9,
+     0.7,
+     0.65
+    ]
+   }
+  },
+  {
+   "id": "deer",
+   "name": "Hirsch",
+   "group": "Wildtier",
+   "skeleton": "quadruped",
+   "height_m": 1.4,
+   "status": "erstellbar",
+   "notes": "Geweih",
+   "quad": {
+    "legK": 1.9,
+    "depth": 36,
+    "snout": 9,
+    "snoutH": 9,
+    "ears": "antlers",
+    "tail": "short",
+    "thick": 0.6,
+    "headS": 0.85,
+    "skin": [
+     1.1,
+     0.85,
+     0.6
+    ],
+    "flesh": [
+     1.0,
+     0.75,
+     0.7
+    ]
+   }
+  },
+  {
+   "id": "chicken",
+   "name": "Huhn",
+   "group": "Nutztier",
+   "skeleton": "bird",
+   "height_m": 0.4,
+   "status": "Idee",
+   "notes": "Flügel, Kamm, zwei dünne Beine"
+  },
+  {
+   "id": "ostrich",
+   "name": "Strauß",
+   "group": "Wildtier",
+   "skeleton": "bird",
+   "height_m": 2.2,
+   "status": "Idee",
+   "notes": "langer Hals, lange Beine"
+  },
+  {
+   "id": "snake",
+   "name": "Schlange",
+   "group": "Wildtier",
+   "skeleton": "serpent",
+   "height_m": 1.5,
+   "status": "Idee",
+   "notes": "nur Wirbelkette, sehr lang"
+  },
+  {
+   "id": "worm",
+   "name": "Riesenwurm",
+   "group": "Fantasie",
+   "skeleton": "serpent",
+   "height_m": 3.0,
+   "status": "Idee",
+   "notes": "Ringe statt Knochen"
+  },
+  {
+   "id": "fish",
+   "name": "Fisch",
+   "group": "Wasser",
+   "skeleton": "fish",
+   "height_m": 0.5,
+   "status": "Idee",
+   "notes": "Flossen, Schuppen, Gräten"
+  },
+  {
+   "id": "shark",
+   "name": "Hai",
+   "group": "Wasser",
+   "skeleton": "fish",
+   "height_m": 2.5,
+   "status": "Idee",
+   "notes": "Knorpel statt Knochen, Zähne"
+  },
+  {
+   "id": "spider",
+   "name": "Riesenspinne",
+   "group": "Fantasie",
+   "skeleton": "arachnid",
+   "height_m": 1.0,
+   "status": "Idee",
+   "notes": "8 Beine, dicker Hinterleib"
+  },
+  {
+   "id": "ant",
+   "name": "Riesenameise",
+   "group": "Fantasie",
+   "skeleton": "insect",
+   "height_m": 1.0,
+   "status": "Idee",
+   "notes": "6 Beine, 3 Körperteile, Fühler"
+  },
+  {
+   "id": "beetle",
+   "name": "Riesenkäfer",
+   "group": "Fantasie",
+   "skeleton": "insect",
+   "height_m": 0.8,
+   "status": "Idee",
+   "notes": "Panzer, bricht in Platten"
+  },
+  {
+   "id": "slime",
+   "name": "Schleim",
+   "group": "Fantasie",
+   "skeleton": "blob",
+   "height_m": 0.7,
+   "status": "Idee",
+   "notes": "kein Skelett, Fleischnetz, teilt sich"
+  },
+  {
+   "id": "centaur",
+   "name": "Zentaur",
+   "group": "Fantasie",
+   "skeleton": "quadruped",
+   "height_m": 2.0,
+   "status": "Idee",
+   "notes": "Pferdekörper + Oberkörper (Mischskelett)"
+  },
+  {
+   "id": "clown",
+   "name": "Clown",
+   "group": "Fantasie",
+   "skeleton": "humanoid",
+   "height_m": 1.8,
+   "status": "Idee",
+   "notes": "Mensch-Skelett, große Schuhe, Perücke/Haare, rote Nase, Kleidung"
+  },
+  {
+   "id": "zergling",
+   "name": "Zergling (angelehnt, StarCraft)",
+   "group": "Spielfiguren",
+   "skeleton": "quadruped",
+   "height_m": 0.7,
+   "status": "Idee",
+   "notes": "schneller Vierbeiner mit Krallen, Panzerplatten; eigene Abwandlung statt Kopie"
+  },
+  {
+   "id": "hydralisk",
+   "name": "Hydralisk (angelehnt, StarCraft)",
+   "group": "Spielfiguren",
+   "skeleton": "serpent",
+   "height_m": 2.0,
+   "status": "Idee",
+   "notes": "Mischskelett: Schlangenunterleib + Oberkörper mit Sichelarmen und Kamm"
+  },
+  {
+   "id": "orc",
+   "name": "Ork (angelehnt, Warcraft)",
+   "group": "Spielfiguren",
+   "skeleton": "humanoid",
+   "height_m": 2.1,
+   "status": "Idee",
+   "notes": "Mensch-Skelett, breit und muskulös, Hauer, grüne Haut"
+  },
+  {
+   "id": "locust",
+   "name": "Monster-Soldat (angelehnt, Gears of War)",
+   "group": "Spielfiguren",
+   "skeleton": "humanoid",
+   "height_m": 2.0,
+   "status": "Idee",
+   "notes": "Mensch-Skelett, grobe Panzerplatten, aggressive Körperhaltung"
+  },
+  {
+   "id": "werewolf",
+   "name": "Werwolf",
+   "group": "Fantasie",
+   "skeleton": "humanoid",
+   "height_m": 2.0,
+   "status": "Idee",
+   "notes": "Mensch-Skelett mit Fell, Schnauze, Klauen"
+  },
+  {
+   "id": "skeleton",
+   "name": "Skelett",
+   "group": "Untote",
+   "skeleton": "humanoid",
+   "height_m": 1.75,
+   "status": "Idee",
+   "notes": "nur Knochen, kein Fleisch"
+  },
+  {
+   "id": "troll",
+   "name": "Troll",
+   "group": "Fantasie",
+   "skeleton": "humanoid",
+   "height_m": 2.6,
+   "status": "Idee",
+   "notes": "sehr groß, dicke Arme"
+  },
+  {
+   "id": "goblin",
+   "name": "Goblin",
+   "group": "Fantasie",
+   "skeleton": "humanoid",
+   "height_m": 1.1,
+   "status": "Idee",
+   "notes": "klein, spitze Ohren"
+  },
+  {
+   "id": "dragon",
+   "name": "Drache",
+   "group": "Fantasie",
+   "skeleton": "quadruped",
+   "height_m": 4.0,
+   "status": "Idee",
+   "notes": "Vierbeiner plus Flügel und langer Schwanz"
+  }
+ ]
+}
