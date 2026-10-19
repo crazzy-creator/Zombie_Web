@@ -1,1 +1,1 @@
-Web-Ansicht vorübergehend offline.
+Blutlabor (Web). Die Spielversion ist nicht veröffentlicht.
