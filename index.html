@@ -1,641 +1,132 @@
-<!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Blutlabor</title>
+<title>Zombie Dismemberment</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <style>
-:root{--bg:#121010;--panel:#1d1918;--panel2:#2a2423;--fg:#ece7e3;--muted:#a1958e;--line:#3b3331;--accent:#e0434d;--accent-fg:#150b0b;--ok:#6fbf86;
---sans:"Archivo",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;color-scheme:dark}
-html.emb{--st:max(env(safe-area-inset-top,0px),var(--top,0px),28px)}
-*{box-sizing:border-box}
-html,body{height:100%;margin:0;padding:0;overflow:hidden;background:#000;color:var(--fg);font:14px/1.45 var(--sans)}
-#stage{position:fixed;inset:0;background:#000;touch-action:none}
-#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-.hud{position:absolute;right:10px;bottom:7px;font:10px var(--mono);color:#e8dcd8;opacity:.75;pointer-events:none;text-shadow:0 1px 2px #000}
-.toast{position:absolute;left:calc(max(6px,env(safe-area-inset-left,0px)) + 168px);top:calc(8px + var(--st,0px));max-width:calc(100% - 340px);background:rgba(0,0,0,.65);color:#fff;font-size:.78rem;padding:4px 9px;border-radius:5px;pointer-events:none;opacity:0;transition:opacity .25s}
-.toast.show{opacity:1}
-button,select,input,textarea{font:inherit;color:inherit}
-button{background:rgba(42,36,35,.92);border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:6px 10px;cursor:pointer;font-weight:600;font-size:.8rem;text-align:left}
-button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.tools{position:fixed;z-index:20;left:max(6px,env(safe-area-inset-left,0px));top:calc(6px + var(--st,0px));display:flex;flex-direction:column;gap:5px;width:158px;max-height:calc(100dvh - 12px - var(--st,0px));overflow-y:auto;scrollbar-width:none}
-.tools::-webkit-scrollbar{display:none}
-.tools button{width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hint{color:var(--muted);font-size:.8rem}
-.win{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;min-width:0;position:fixed;z-index:30;top:calc(6px + var(--st,0px));bottom:max(8px,env(safe-area-inset-bottom,0px));right:max(8px,env(safe-area-inset-right,0px));width:min(46vw,380px);display:none;flex-direction:column;box-shadow:0 8px 30px rgba(0,0,0,.5)}
-body.optsOpen .win{display:flex}
-.wtitle{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;background:var(--panel2);font-weight:700;font-size:.85rem}
-.tabs{padding:6px;border-bottom:1px solid var(--line);background:var(--panel2)}
-.tabs select,.cselect{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px}
-.pane{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1;min-height:0;overflow-y:auto}
-.row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center}
-.row label{font-size:.82rem}
-.row output{font:12px var(--mono);color:var(--muted);min-width:3.2em;text-align:right}
-.row input[type=range]{grid-column:1/-1;width:56%;max-width:200px;justify-self:start;accent-color:var(--accent);touch-action:none}
-.row select{grid-column:1/-1;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px}
-.row .tip{grid-column:1/-1;color:var(--muted);font-size:.74rem;margin-top:-2px}
-.chk{display:flex;gap:8px;align-items:center;font-size:.85rem}
-.pane h3{margin:2px 0 0;font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-.pane p{margin:0;font-size:.82rem}
-.pane ul{margin:0;padding-left:1.1em;font-size:.82rem;display:grid;gap:3px}
-textarea{width:100%;min-height:150px;background:var(--bg);border:1px solid var(--line);border-radius:6px;font:11px var(--mono);padding:6px}
-.msg{font-size:.8rem;color:var(--ok);min-height:1.2em}
-.vlwin{position:fixed;z-index:35;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);overflow:hidden;touch-action:none}
-.vlhead{display:flex;align-items:center;gap:6px;padding:5px 6px;background:var(--panel2);cursor:grab;font-weight:700;font-size:.78rem;user-select:none;touch-action:none}
-.vlhead span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.vlhead button{padding:3px 8px;font-size:.75rem}
-.vlbody{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:5px}
-.vlbody img,.vlbody canvas{width:100%;display:block;border-radius:5px;background:#c8c4be;aspect-ratio:380/320;object-fit:contain}
-.vlcap{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:0 5px 5px;font-size:.68rem;color:var(--muted);text-align:center}
-.vlact{display:flex;gap:4px;padding:0 5px 5px}
-.vlact button{flex:1;padding:4px 6px;font-size:.72rem}
-.pop{position:fixed;z-index:40;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.5);padding:4px;display:flex;flex-direction:column;min-width:220px;max-width:min(60vw,320px)}
-.pop button{text-align:left;background:transparent;border:none;display:flex;flex-direction:column;gap:1px;padding:8px 10px;border-radius:6px}
-.pop button.on{background:var(--accent);color:var(--accent-fg)}
-.pop button small{font-weight:400;color:var(--muted);font-size:.72rem}
-.pop button.on small{color:inherit;opacity:.85}
+/* Layout: eine Sperrkarte mittig auf Schwarz, danach nimmt das Spiel die ganze Fläche */
+:root { --bg:#0d0b0b; --panel:#171313; --line:#3a2a2a; --fg:#ece6e2; --muted:#9a8f8a; --blood:#c4261d; --f-body:system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:ui-monospace,"JetBrains Mono",Consolas,monospace; color-scheme: dark; }
+html, body { height:100%; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.4 var(--f-body); padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); box-sizing:border-box; }
+#lock { min-height:100%; display:flex; align-items:center; justify-content:center; }
+.card { width:100%; max-width:360px; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:28px 24px; display:flex; flex-direction:column; gap:16px; }
+h1 { margin:0; font-size:22px; letter-spacing:.02em; text-wrap:balance; }
+p { margin:0; color:var(--muted); }
+input { font:600 28px var(--f-mono); letter-spacing:.35em; text-align:center; text-transform:uppercase; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:4px; padding:12px 8px; width:100%; box-sizing:border-box; }
+input:focus-visible, button:focus-visible { outline:2px solid var(--blood); outline-offset:2px; }
+button { font:600 16px var(--f-body); background:var(--blood); color:#fff; border:0; border-radius:4px; padding:12px; cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+#msg { min-height:1.4em; font-size:14px; color:var(--muted); }
+#msg.err { color:#ff6b61; }
+#game { position:fixed; inset:0; width:100%; height:100%; border:0; background:#000; }
 </style>
-<div id="stage"><canvas id="cv"></canvas><div class="hud" id="hud"></div><div class="toast" id="toast"></div></div>
-<div class="tools" id="tools"></div>
-<aside class="win" id="win"><div class="wtitle"><span>Optionen</span><span class="hint" id="curPre"></span><button id="winClose" aria-label="Schließen">✕</button></div><div class="tabs" id="tabs"></div><div class="pane" id="pane"></div></aside>
+<div id="lock"><form class="card" id="f" autocomplete="off">
+  <h1>Zombie Dismemberment</h1>
+  <p>Geschützte Vorschau. Der Zugangscode wechselt täglich.</p>
+  <input id="code" maxlength="6" inputmode="text" autocapitalize="characters" spellcheck="false" aria-label="Zugangscode" placeholder="······" autofocus>
+  <button id="go" type="submit">Öffnen</button>
+  <div id="msg" role="status"></div>
+</form></div>
 <script>
-(()=>{
-let W=1280,H=720,FLOOR=690,K=1,RES=1.5,DPR=1;const G=1500;const VIEW={z:1,px:0,py:0};
-const $=id=>document.getElementById(id);const EMB=window.parent!==window&&new URLSearchParams(location.search).has('top');if(EMB){document.documentElement.classList.add('emb');const tq=new URLSearchParams(location.search).get('top');if(tq)document.documentElement.style.setProperty('--top',Math.max(0,+tq||0)+'px')}
-const rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),lerp=(a,b,t)=>a+(b-a)*t;
-// ---------- Rauschen ----------
-function hash(x,y){let h=(x*374761393+y*668265263)|0;h=(h^(h>>>13))*1274126177|0;return((h^(h>>>16))>>>0)/4294967295}
-function vn(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);return lerp(lerp(hash(xi,yi),hash(xi+1,yi),u),lerp(hash(xi,yi+1),hash(xi+1,yi+1),u),v)}
-const fbm=(x,y)=>vn(x,y)*.55+vn(x*2.1,y*2.1)*.3+vn(x*4.3,y*4.3)*.15;
-// ---------- Einstellungen ----------
-const OPT=[
-// tab, key, type, label, min, max, step, default, tip
-['drop','size','r','Tropfenradius',1,14,.1,3.8,'Radius in Pixel (Spiel: 1,1 bis 3,8; Brocken bis 6,5)'],
-['drop','sizeVar','r','Streuung der Größe',0,1,.01,0.47,'0 = alle gleich, 1 = sehr unterschiedlich'],
-['drop','speedN','r','Aufprallgeschwindigkeit (zur Wand)',100,1800,10,760,'Je schneller, desto breiter und zerrissener der Fleck'],
-['drop','count','r','Tropfen pro Schuss',1,40,1,9,'Beim Schießen und Setzen'],
-['drop','speedVar','r','Geschwindigkeits-Streuung',0,1,.01,0.51,'Wie stark die Aufprallgeschwindigkeit zwischen Tropfen schwankt (langsam = punktuell, schnell = Strich)'],
-['drop','bigShare','r','Anteil großer Tropfen',0,1,.01,0.56,'Mischung je Schuss, z. B. Schnitt: 8 kleine und 2 große'],
-['drop','bigMul','r','Größe der großen Tropfen (×)',1,5,.05,1,''],
-['drop','smallMul','r','Größe der kleinen Tropfen (×)',.15,1,.01,0.21,''],
-['drop','gushMul','r','Schwall-Faktor (Menge ×)',2,30,1,8,'Werkzeug „Schwall“: so viel mehr Tropfen als ein normaler Satz'],
-['drop','amount','r','Blutmenge (Faktor)',.2,6,.05,3.75,'Gesamtmenge je Schuss: mehr Tropfen und etwas größere Tropfen (Menge = Faktor × Normalmenge)'],
-['drop','cone','r','Streukegel (Grad)',0,90,1,18,'Streuung der Richtung beim Schießen'],
-['drop','jetLen','r','Strahllänge nach Kraft',0,2,.01,0,'0 = Flugstrecke unabhängig vom Tempo (wie bisher), 1 = stärkerer Strahl fliegt proportional weiter, 2 = überproportional'],
-['drop','wallDist','r','Flugzeit bis zur Wand (s)',.03,1.2,.01,0.71,'Wie lange der Tropfen in der Ebene fliegt, bevor er die Wand trifft'],
-['hit','style','s','Aufprallform',0,0,0,'auto','',[['auto','Automatisch (nach Energie)'],['stern','Stern / Krone'],['flatsch','Flatsch mit Rand'],['komet','Komet / Schleuderspur'],['nebel','Nebel / Sprühpunkte'],['alt','Ist-Zustand (Spiel)']]],
-['hit','spread','r','Ausbreitung',.3,3,.01,0.53,'Größe des Flecks im Verhältnis zum Tropfen'],
-['hit','rough','r','Randunruhe',0,1,.01,0.89,'Wie ausgefranst der Rand ist'],
-['hit','rim','r','Randwulst',0,1,.01,0.18,'Dunklerer, dickerer Rand (Oberflächenspannung)'],
-['hit','centerLight','r','Hellere Mitte',0,1,.01,0.35,'Dünner Film in der Mitte ist heller'],
-['hit','spines','r','Spritzfinger (Anzahl)',0,32,1,21,'Strahlen vom Fleck nach außen'],
-['hit','spineLen','r','Länge der Finger',.2,3,.01,0.95,''],
-['hit','sats','r','Satellitentropfen',0,40,1,24,'Kleine Tropfen um den Fleck'],
-['hit','satSize','r','Größe der Satelliten',.2,2,.01,0.23,''],
-['hit','obliq','r','Verzerrung durch Richtung',0,2,.01,1,'Schräge Treffer ziehen den Fleck in Flugrichtung'],
-['hit','spdLong','r','Strichlänge durch Tempo',0,2,.01,1,'Schneller = längerer Strich; langsam = punktuelle Platzer'],
-['hit','spdThin','r','Strichverdünnung durch Tempo',0,2,.01,1,'Schneller = dünnerer Strich'],
-['hit','subStreaks','r','Nebenstriche (schnell)',0,8,1,4,'Bei schnellen Spritzern 2 bis 5 sehr kleine Striche neben dem Hauptstrich'],
-['hit','subSpread','r','Streuung der Nebenstriche (rad)',0,.6,.01,0.12,'Winkelstreuung zur Flugrichtung, minimal'],
-['hit','arc','r','Bogen durch Schwerkraft',0,2,.01,1,'Mittleres Tempo: der Strich biegt sich leicht nach unten'],
-['hit','tipRun','r','Läufer an der Strichspitze',0,1,.01,0.26,'Striche, die mit der Schwerkraft nach unten gehen, können an der Spitze einen Läufer starten'],
-['hit','gapChance','r','Unterbrechung im Strahl',0,1,.01,0.67,'Chance, dass ein Strahl endet und wenige Millimeter danach dünner und kürzer neu beginnt'],
-['hit','mist','r','Sprühnebel',0,1,.01,0.86,'Winzige Punkte um den Aufprall'],
-['flow','runChance','r','Neigung zu laufen',0,1,.01,0.04,'Anteil der Flecken, aus denen ein Läufer wird'],
-['flow','runSize','r','Läufergröße (Breite und Kopf)',.2,2,.01,1,'Skaliert Spurbreite und Tropfenkopf aller normalen Läufer'],
-['flow','runCut','r','Läufer zusätzlich reduzieren',0,1,.01,0.82,'Zusätzlicher Dämpfer: verringert Chance und Zahl der Läufer (auch an Strichspitzen und bei Vorlagen)'],
-['flow','coupleRun','r','Läufer an Blutmenge koppeln',0,1.5,.01,0.18,'0 = Blutmenge ändert die Läufer nicht; 1 = doppelte Menge verdoppelt die Läufer-Neigung'],
-['flow','wetBoost','r','Nässe verstärkt Läufer',0,2,.01,0.6,'Je mehr Blut schon an der Stelle ist, desto eher und größer laufen neue Läufer'],
-['flow','runCount','r','Anzahl Läufer (Faktor)',.3,3,.01,0.46,'Mehr Blut am Fleck = mehr Läufer (1, 2, 4 …)'],
-['flow','wetCarry','r','Nasse Wand trägt weiter',0,1,.01,0.75,'Läufer laufen weiter, wenn die Wand schon nass/dick benetzt ist'],
-['flow','pickup','r','Aufnahme aus dickem Film',0,2,.01,0.8,'Läufer nehmen Blut aus dicken Stellen auf und werden länger'],
-['flow','adhesion','r','Haftung der Wand',0,1,.01,0,'Hoch = Tropfen bleiben hängen, niedrig = laufen schon klein'],
-['flow','visc','r','Zähigkeit',.3,4,.01,2.64,'Hoch = langsam und kurz'],
-['flow','speedScale','r','Fließtempo',.2,3,.01,0.2,''],
-['flow','retain','r','Anteil, der abläuft',.1,1,.01,0.41,'Rest bleibt im Fleck'],
-['flow','trailW','r','Spurbreite',.3,2.5,.01,1.82,''],
-['flow','film','r','Verbrauch durch Spur',.2,3,.01,1.52,'Je höher, desto kürzer läuft der Tropfen (Spur frisst Volumen)'],
-['flow','wobble','r','Schlängeln',0,1.5,.01,0,'Zufälliges Ausweichen an Rauigkeiten'],
-['flow','mergePull','r','Anziehung nasser Spuren',0,2,.01,1.18,'Läufer folgen nassen Spuren und vereinigen sich'],
-['flow','bead','r','Perlen am Rand der Spur',0,1,.01,0.25,'Kleine Tropfen bleiben neben der Spur zurück'],
-['flow','dryTime','r','Trockenzeit (s)',3,120,1,7,'Dickflüssiger werdendes Blut läuft langsamer und hört auf'],
-['flow','ledge','b','Sims einblenden',0,0,0,false,'Kante, an der Blut sich sammelt und abtropft'],
-['flow','drip','r','Abtropfgröße',20,400,1,170,'Volumen, ab dem ein Tropfen vom Sims fällt'],
-['look','dark','r','Helligkeit des Blutes',0,1,.01,0.54,'0 = fast schwarz, 1 = leuchtend rot'],
-['look','alpha','r','Deckkraft',.3,1,.01,0.79,''],
-['look','gloss','r','Glanz (frisch)',0,1,.01,0.86,'Helle Reflexe auf frischen Spuren'],
-['look','glossTime','r','Glanz hält (s)',1,40,.5,17,''],
-['look','age','r','Nachdunkeln',0,1,.01,1,'Alte Flecken werden dunkler'],
-['look','wall','s','Wandoberfläche',0,0,0,'beton','',[['beton','Beton dunkel (Spiel)'],['hell','Beton hell'],['fliese','Fliesen weiß'],['glas','Glas / Lack'],['putz','Putz grob']]],
-['look','dbgWet','b','Nässe-Karte anzeigen',0,0,0,false,'Zeigt, wo Spuren noch nass sind'],
-['look','dbgThk','b','Dicken-Karte anzeigen',0,0,0,false,'Zeigt die Blutfilmdicke (hell = dick); dort starten lange Läufer'],
-['look','dbgPin','b','Haft-Karte anzeigen',0,0,0,false,'Zeigt Rauigkeit der Wand (hell = Haftstelle)'],
-['src','sprayRate','r','Sprühen: Tropfen/s',5,300,1,70,'Werkzeug „Sprühen“ (Maus gedrückt halten)'],
-['src','leakRate','r','Wunde: Tropfen/s',.2,12,.1,2,'Dauerhaft nässende Quelle (Werkzeug „Quelle“)'],
-['src','leakVol','r','Wunde: Tropfenvolumen',10,300,1,70,''],
-['src','artPower','r','Arterie: Strahlstärke',200,1800,10,1360,''],
-['src','artHz','r','Arterie: Pulse/s',.5,4,.1,1.6,''],
-['src','timeScale','r','Zeitlupe (Faktor)',.1,1.5,.01,1,'1 = Echtzeit'],
-['src','auto','b','Zufallsfeuer an',0,0,0,false,'Schießt selbstständig, um Varianten im Dauerlauf zu sehen']
-];
-const TABS=[['var','Varianten'],['drop','Tropfen'],['hit','Aufprall'],['flow','Fließen'],['look','Optik'],['src','Quellen'],['vl','Vorlagen-Labor'],['info','Befund'],['exp','Export']];
-const DEF={};OPT.forEach(o=>DEF[o[1]]=o[7]);
-const JULIAN={size:3.8,sizeVar:.47,speedN:760,count:3,speedVar:.51,bigShare:.56,bigMul:1,smallMul:.21,amount:3.75,cone:18,wallDist:.71,style:'auto',spread:.92,rough:.89,rim:0,centerLight:.35,spines:21,spineLen:1.29,sats:24,satSize:.23,obliq:1,spdLong:1,spdThin:1,subStreaks:4,subSpread:.12,arc:1,tipRun:.26,jetLen:0,mist:.5,runChance:.14,coupleRun:.31,wetBoost:.6,runCount:.71,wetCarry:.75,pickup:.8,adhesion:0,visc:2.64,speedScale:.2,retain:.41,trailW:1.82,film:1.52,wobble:0,mergePull:1.18,bead:.25,dryTime:7,ledge:false,drip:170,dark:.35,alpha:.85,gloss:.86,glossTime:4,age:1,wall:'hell',sprayRate:70,leakRate:2,leakVol:70,artPower:1360,artHz:1.6,timeScale:1,auto:false};
-const PRESETS=[
-{id:'julian',n:'Julians Einstellung',d:'Übernommen aus dem Export (hell, viele kleine + große Tropfen)',v:JULIAN},
-{id:'real',n:'Realistisch (Mix)',d:'Form nach Energie, Läufer nach Volumen',v:{}},
-{id:'alt',n:'Ist-Zustand',d:'Wie im Spiel: Ellipsen + kurze Linien',v:{bigShare:0,smallMul:1,speedVar:0,runCount:.3,wetCarry:0,pickup:0,spdLong:0,spdThin:0,style:'alt',runChance:.2,retain:.5,wobble:.1,mergePull:0,bead:0,film:.3,dryTime:120,gloss:0,age:0,spines:0,sats:2,mist:0,rim:0,centerLight:0,size:2.6,sizeVar:.5,speedN:500,count:10}},
-{id:'schnitt',n:'Schnitt (viele kleine, wenige große)',d:'8 kleine und 2 große Tropfen, Läufer an den großen',v:{count:10,bigShare:.2,bigMul:2.8,smallMul:.5,speedN:700,speedVar:.5,runChance:.8,runCount:1.1}},
-{id:'dünn',n:'Frisch & dünn',d:'Schneller Spritzer, lange helle Läufer',v:{style:'stern',visc:.5,adhesion:.15,speedScale:1.5,dark:.55,spines:20,spineLen:1.3,sats:16,mist:.4,runChance:.8,film:.7,rim:.2,dryTime:60}},
-{id:'dick',n:'Dick & zäh',d:'Flatsch mit Wulst, kurze schwere Läufer',v:{style:'flatsch',visc:2.6,adhesion:.55,speedScale:.6,dark:.15,rim:.9,rough:.5,spines:5,spineLen:.5,sats:3,mist:0,runChance:.5,film:1.5,dryTime:12,size:6.5}},
-{id:'arterie',n:'Arterienspritzer',d:'Schleuderspuren, Satelliten, Nebel',v:{style:'komet',speedN:1100,obliq:1.6,sats:22,satSize:.8,mist:.55,spines:6,runChance:.45,dark:.45,cone:8,count:14,size:3.4,wallDist:.12}},
-{id:'rinn',n:'Rinnsal',d:'Wenig Aufprall, viel Fließen, Sims',v:{style:'flatsch',spread:.6,spines:0,sats:0,mist:0,runChance:1,retain:1,adhesion:.1,visc:.9,mergePull:1.5,wobble:.8,film:.4,bead:.5,ledge:true,dryTime:50,size:5.5,count:3}},
-{id:'nebel',n:'Feinsprühen',d:'Tausende Punkte, kaum Laufen',v:{style:'nebel',size:1.8,sizeVar:.6,count:30,mist:1,sats:6,runChance:.1,speedN:1300,dark:.5,cone:40}},
-{id:'komet',n:'Schleuderspur',d:'Lange Kometen in Flugrichtung',v:{style:'komet',obliq:2,speedN:800,sats:14,spines:0,mist:.1,runChance:.3,cone:10,dark:.4}},
-{id:'glas',n:'Glatte Fliese',d:'Alles läuft sofort, lange Bahnen',v:{wall:'fliese',adhesion:.05,visc:.7,speedScale:1.8,runChance:1,film:.5,mergePull:1.2,gloss:.9,glossTime:25}}
-];
-let P=Object.assign({},DEF,JULIAN), P2=null, preId='julian', preId2='';
-try{const s=JSON.parse(localStorage.getItem('blutlabor')||'null');if(s&&s.P){P=Object.assign({},DEF,s.P);preId=s.preId||'real';if(s.preId2){const q=PRESETS.find(p=>p.id===s.preId2);if(q){preId2=q.id;P2=Object.assign({},DEF,q.v)}}}}catch(e){}
-function save(){try{localStorage.setItem('blutlabor',JSON.stringify({P,preId,preId2}))}catch(e){}}
-const pOf=x=>(P2&&x>W/2)?P2:P;
-// ---------- Zeichenflächen ----------
-const cv=$('cv'),ctx=cv.getContext('2d');
-const mk=()=>{const c=document.createElement('canvas');c.width=1;c.height=1;return c};
-const bgc=mk(),stain=mk(),gloss=mk();
-const sc=stain.getContext('2d'),gc=gloss.getContext('2d'),bg=bgc.getContext('2d');
-// Gitter für Nässe und Haftung (4 px Zellen)
-const CS=4;let CW=1,CH=1,wet=new Float32Array(1),pin=new Float32Array(1),thk=new Float32Array(1);
-function buildWall(){
-  const t=P.wall;bg.clearRect(0,0,W,H);
-  const base={beton:[44,42,40],hell:[150,146,140],fliese:[226,226,222],glas:[170,186,190],putz:[196,186,170]}[t];
-  const g=bg.createLinearGradient(0,0,0,FLOOR);g.addColorStop(0,`rgb(${base.map(v=>v*.8|0)})`);g.addColorStop(1,`rgb(${base.map(v=>Math.min(255,v*1.08)|0)})`);
-  bg.fillStyle=g;bg.fillRect(0,0,W,FLOOR);
-  const dens=Math.round((t==='putz'?9000:t==='glas'?500:t==='fliese'?1500:6000)*(W*FLOOR/(1280*640)));
-  for(let i=0;i<dens;i++){const v=Math.random()<.5?-1:1,a=rnd(.02,t==='putz'?.2:.1);bg.fillStyle=v<0?`rgba(0,0,0,${a})`:`rgba(255,255,255,${a*.7})`;const s=rnd(.8,t==='putz'?4:2.2);bg.fillRect(rnd(0,W),rnd(0,FLOOR),s,s)}
-  if(t==='fliese'){bg.strokeStyle='rgba(120,120,115,.7)';bg.lineWidth=2;for(let x=0;x<=W;x+=160){bg.beginPath();bg.moveTo(x,0);bg.lineTo(x,FLOOR);bg.stroke()}for(let y=0;y<=FLOOR;y+=160){bg.beginPath();bg.moveTo(0,y);bg.lineTo(W,y);bg.stroke()}}
-  if(t==='beton'||t==='hell'){bg.strokeStyle='rgba(0,0,0,.35)';bg.lineWidth=2;for(let x=320;x<W;x+=320){bg.beginPath();bg.moveTo(x,0);bg.lineTo(x,FLOOR);bg.stroke()}bg.beginPath();bg.moveTo(0,300);bg.lineTo(W,300);bg.stroke()}
-  if(t==='glas'){const g2=bg.createLinearGradient(0,0,W,0);g2.addColorStop(0,'rgba(255,255,255,.0)');g2.addColorStop(.3,'rgba(255,255,255,.12)');g2.addColorStop(.5,'rgba(255,255,255,0)');bg.fillStyle=g2;bg.fillRect(0,0,W,FLOOR)}
-  // Boden
-  const fl=bg.createLinearGradient(0,FLOOR,0,H);const fb=t==='fliese'||t==='hell'?[120,118,112]:[28,26,25];fl.addColorStop(0,`rgb(${fb})`);fl.addColorStop(1,`rgb(${fb.map(v=>v*.7|0)})`);bg.fillStyle=fl;bg.fillRect(0,FLOOR,W,H-FLOOR);
-  bg.fillStyle='rgba(0,0,0,.5)';bg.fillRect(0,FLOOR-3,W,3);
-  // Haftkarte
-  const mul={beton:.8,hell:.8,fliese:.35,glas:.12,putz:1}[t];
-  for(let y=0;y<CH;y++)for(let x=0;x<CW;x++){let p=fbm(x*.18,y*.18)*.75+hash(x,y)*.25;p*=mul;if(t==='fliese'&&((x*CS)%160<6||(y*CS)%160<6))p=Math.max(p,.9);pin[y*CW+x]=clamp(p,0,1)}
-}
-let oldRES=1.5;
-function initWorld(){
-  DPR=Math.min(2,window.devicePixelRatio||1);const iw=window.innerWidth||800,ih=window.innerHeight||400;K=ih/720;
-  const nW=Math.max(400,Math.round(720*iw/ih)),nF=Math.round(720-30/K);
-  if(nW===W&&nF===FLOOR&&stain.width>1){cv.width=Math.round(iw*DPR);cv.height=Math.round(ih*DPR);clampView();return}
-  let old=null;if(stain.width>1){old=document.createElement('canvas');old.width=stain.width;old.height=stain.height;old.getContext('2d').drawImage(stain,0,0)}
-  W=nW;H=720;FLOOR=nF;RES=Math.min(1.5,Math.sqrt(5.2e6/(W*H)));
-  for(const c of [bgc,stain,gloss]){c.width=Math.round(W*RES);c.height=Math.round(H*RES)}
-  for(const c of [bg,sc,gc])c.setTransform(RES,0,0,RES,0,0);
-  if(old)sc.drawImage(old,0,0,old.width/oldRES,old.height/oldRES);
-  oldRES=RES;
-  CW=Math.ceil(W/CS);CH=Math.ceil(H/CS);wet=new Float32Array(CW*CH);pin=new Float32Array(CW*CH);thk=new Float32Array(CW*CH);
-  ledgeX0=W*.3;ledgeX1=W*.7;buildWall();
-  cv.width=Math.round(iw*DPR);cv.height=Math.round(ih*DPR);clampView();
-}
-function clampView(){const iw=window.innerWidth||800,ih=window.innerHeight||400;VIEW.z=clamp(VIEW.z,1,6);VIEW.px=clamp(VIEW.px,iw*(1-VIEW.z),0);VIEW.py=clamp(VIEW.py,ih*(1-VIEW.z),0)}
-let rsT=0;window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(initWorld,150)});
-initWorld();
-// ---------- Farbe ----------
-function colr(p,a,k=1){const b=p.dark;return`rgba(${Math.round(lerp(72,205,b)*k)},${Math.round(lerp(0,20,b)*k)},${Math.round(lerp(5,24,b)*k)},${a})`}
-// ---------- Zustand ----------
-let drops=[],slides=[],pools=[],leaks=[],stamps=0,paused=false,tool='set',T=0,lastAge=0,shots=0;
-var ledgeX0=360,ledgeX1=900;const ledgeY=()=>Math.round(FLOOR*.46);
-const cellAt=(x,y)=>{const cx=x/CS|0,cy=y/CS|0;return(cx<0||cy<0||cx>=CW||cy>=CH)?-1:cy*CW+cx};
-const wetAt=(x,y)=>{const i=cellAt(x,y);return i<0?0:wet[i]};
-const pinAt=(x,y)=>{const i=cellAt(x,y);return i<0?.5:pin[i]};
-const thkAt=(x,y)=>{const i=cellAt(x,y);return i<0?0:thk[i]};
-function thkAdd(x,y,v){const i=cellAt(x,y);if(i>=0)thk[i]=clamp(thk[i]+v,0,4)}
-function addWet(x,y,v){const i=cellAt(x,y);if(i>=0)wet[i]=Math.min(1,wet[i]+v)}
-// ---------- Tropfen erzeugen ----------
-function newDrop(x,y,vx,vy,r,p,wallT){const jet=1+p.jetLen*(clamp(Math.hypot(vx,vy)/800,.2,3)-1);drops.push({x,y,vx,vy,r,p,wallT:wallT==null?p.wallDist*rnd(.5,1.3)*jet:wallT,col:rnd(.85,1.1)})}
-function dropR(p){const big=Math.random()<p.bigShare;const m=big?p.bigMul*rnd(.85,1.2):p.smallMul*rnd(.75,1.1);return clamp(p.size*amtR(p)*m*Math.exp(rnd(-1,1)*p.sizeVar*.5),.8,16)}
-function amtN(p,n){return Math.max(1,Math.round(n*Math.sqrt(p.amount)))}
-const amtR=p=>Math.pow(p.amount,1/6);
-let bloodTotal=0;
-function shoot(x,y,vx,vy,p,n){n=amtN(p,n);for(let i=0;i<n&&drops.length<1500;i++){const a=Math.atan2(vy,vx)+rnd(-1,1)*p.cone*Math.PI/180,s=Math.hypot(vx,vy)*rnd(.8,1.2);const r=dropR(p);newDrop(x,y,Math.cos(a)*s,Math.sin(a)*s,r,p)}}
-// ---------- Aufprall an der Wand ----------
-function hit(d){
-  const p=d.p,c=sc,vt=Math.hypot(d.vx,d.vy),vn=p.speedN*Math.exp(rnd(-1,1)*p.speedVar),r=d.r;
-  const spd=clamp((Math.hypot(vn,vt*.6)-250)/900,0,1);   // 0 = langsam (punktueller Platzer) ... 1 = schnell (langer, dünner Strich)
-  const E=Math.pow(r/6,3)*(vn*vn+vt*vt*.5)/(700*700);
-  const R=r*p.spread*(.9+1.4*Math.pow(E,.25));
-  const dirA=vt>40?Math.atan2(d.vy,d.vx):rnd(0,Math.PI*2);
-  const tilt=clamp(vt/vn,0,1.6)*p.obliq*(.25+.75*spd);
-  let style=p.style;
-  if(style==='auto')style=spd<.2?'flatsch':(spd>.75?(tilt>.4?'komet':'nebel'):(tilt>.35?'komet':'stern'));
-  c.save();c.globalAlpha=p.alpha;
-  const k=d.col,sl=p.spdLong,st=p.spdThin;
-  if(style==='alt'){altHit(d,p);}
-  else{
-    if(style==='stern'||style==='flatsch'){
-      blob(d.x,d.y,R,tilt,dirA,p,k,style==='flatsch'?1.4:1);
-      const ns=Math.round((style==='flatsch'?p.spines*.4:p.spines)*(.15+.85*spd));
-      for(let i=0;i<ns;i++){const a=rnd(0,Math.PI*2),al=R*(.45+rnd(0,1)*p.spineLen*1.3*(.3+.7*spd*sl))*(style==='flatsch'?.6:1),w0=R*rnd(.07,.16)*lerp(1.2,.7,spd*Math.min(1,st));spine(d.x,d.y,a,R*.7,al,w0,p,k)}
-    }
-    if(style==='komet'){
-      blob(d.x,d.y,R*lerp(.9,.65,spd),tilt*.6,dirA,p,k,1);
-      // mittleres Tempo: Strich biegt sich leicht Richtung Schwerkraft; schnell = gerade
-      const bend=p.arc*Math.max(0,Math.sin(Math.PI*clamp((spd-.1)/.7,0,1)))*(.4+.6*Math.min(1,Math.abs(Math.cos(dirA))+.3));
-      const L=R*(.6+(1.5+tilt*3.5)*spd*1.6*sl+(spd<.3?tilt*1.2:0)),wd=R*lerp(.65,.14,clamp(spd*st,0,1));const at=tailShape(d.x,d.y,dirA,L,wd,p,k,bend);
-      for(let i=0;i<Math.round(p.sats*(.3+.5*spd));i++){const t=rnd(.3,1),q=at(t);dot(q[0]+rnd(-1,1)*R*.3,q[1]+rnd(-1,1)*R*.3,R*rnd(.06,.22)*p.satSize*(1.3-t*.6),p,k)}
-      // Strich geht mit der Schwerkraft (nach unten gebogen oder abwärts gerichtet): an der Spitze kann ein Läufer starten
-      const gw=clamp(Math.max(bend*1.5,Math.sin(dirA)*.9),0,1);
-      if(p.tipRun>0&&Math.random()<p.tipRun*gw*(1-p.runCut)){const q=at(1),Vc1=lerp(8,400,p.adhesion);thkAdd(q[0],q[1],.3);
-        if(slides.length<300)slides.push({p,x:q[0],y:q[1]+1,vx:Math.cos(dirA)*vt*.03,V:Vc1*(.8+1.8*Math.random())*(.5+.5*gw),V0:Vc1,age:0,px:0,py:0,stuck:0,go:true,seed:Math.random()*100,col:k,len:0,wMax:Math.max(.8,2*(wd*Math.pow(.12,.9)+.25))})}
-    }
-    if(style==='nebel'){blob(d.x,d.y,R*.45,tilt*.4,dirA,p,k,1);const n=Math.round((40+p.mist*160)*(.3+.7*spd));for(let i=0;i<n;i++){const q=rnd(0,1),a=rnd(0,Math.PI*2),dd=R*(.5+q*q*(1.2+2*spd));dot(d.x+Math.cos(a)*dd,d.y+Math.sin(a)*dd,rnd(.3,1.1)*p.satSize,p,k)}}
-    if(style!=='komet'&&style!=='nebel'){
-      for(let i=0;i<Math.round(p.sats*(.4+.6*spd));i++){const a=rnd(0,Math.PI*2),dd=R*rnd(1.2,1.8+spd*1.4+tilt*2);dot(d.x+Math.cos(a)*dd,d.y+Math.sin(a)*dd,R*rnd(.04,.17)*p.satSize,p,k)}
-    }
-    if(style!=='nebel'&&p.mist>0){const n=Math.round(p.mist*45*(.3+.7*spd));for(let i=0;i<n;i++){const a=rnd(0,Math.PI*2),dd=R*rnd(1,3.8);dot(d.x+Math.cos(a)*dd,d.y+Math.sin(a)*dd,rnd(.3,.8),p,k)}}
+const WR = {"2026-10-25":["tUGQUUka/qvXqnBdULjx9A==","UMnSHlr3tut3Ptxt","9AJrQh1SzCPjs/O6+U5JuToJTPfkJVQnMNUT7i35i60h35CV0ru1LlAp+IFVvwDH"],"2026-10-26":["N9tWDplehVsgNI90Knum2Q==","HWBJQLtmP7SZ8lTK","yEhNBzKGVrBtMHBFF1wxDIo/lZaxEaecsC1LlCXt75kpclriixqkO2oGZyiwbuPF"],"2026-10-27":["uEPTxv+cLZXehkIChfgvyA==","+RH1yOZAX2nCSPV9","VRF+QFbYLSlW+PMJmFWZKbRiCBIVSa77HavgPPngN9YHnQMTT/9m4ZWJfaa0WdGu"],"2026-10-28":["qqqqduE1ikzquD7BCw8+vQ==","hiI7a7ZXtajugrq+","Xm5dHL2bAwGTADV5UoU17fS56oKrv2ESJmcRWdrVhaSeCHaiyHKDiCsNUIpl6bXv"],"2026-10-29":["DBXPCUZXHjyeywTbtCqyLg==","gKUnmx+mDGECcGw+","st/0S8X46Jh1Pkg+lsVcFR3OFm2ZCIzHRjL0CDwaSWJ+0zxw1X0OXiI61Os1j/98"],"2026-10-30":["vfd1PMDwwu/vlGLTRi2tQw==","R4NPsqyBC7lhOEDQ","hK1i67RaaT2ImZ9zo+ehGm93ELgaR3uTWw9qBFRa44OUPfqOrkDn487OEVx2MYzx"],"2026-10-31":["NkGycmTt9WJO+raNUrtzdA==","a4oU9nUjRGUjdO8V","8a1K5nAgBYKE8Le5x33YdMM3FQwZCUZNFkrPdlsa8DSosUMTrAGOKNis8D2ped4w"],"2026-11-01":["WdfwS3MVceQDnUf4AukgHg==","pP/DPtlNo1cOPxq/","VZO76UEBXIZhtR6W+CBhzaKnv+qUMWRXHoxdIlpCsnyf5QUbOBxhm03S6cVzWQPx"],"2026-11-02":["J0vcxix18Z8o8jBadG/ZnQ==","qtypY875+sCqs9QX","IBqP4rtengdrtPIISQsGUAb7CVELWneY5u8TZkK15AGCS8hxsE4B8vdJ3mPhLpFK"],"2026-11-03":["pBeT/95vCkju1Uwe9D00LA==","ueMawE4YFCYFLZN8","pOFnnM7zTxcoB3HEiYS8R7PmeLhbE7KjWefltKaEb0WwXlyW7OAXEpCi6RxzY9H8"],"2026-11-04":["ND6oIj4vkQFQtoBOktrzbA==","yAu18NzOPL87pajU","KV6BumbkrZnnHvMZcBEL182tICcXit8CDgFVb2VOTRmOIO3SLvBdUBaakkHVk8xz"],"2026-11-05":["UfX5Z9w4kGD5CDBl023zkA==","/9bynHDn33mlTwvI","5fxfVOp5lSLN/x360oOiY5+SCWpacwUKxgWffNeFXQxWe+cK5SVljezJvBlH7V6G"],"2026-11-06":["gGRRDm7xZRZFORnN8g/ncw==","xZwnFnYt6jB7mTLB","G9XDjVF/bEE237NwL55Lx+wzIihCpshThqcdu4OnaN82v3ok9vuwjAaOVMmYTuR7"],"2026-11-07":["rdb85ei5Yy+uK1bED4cwjg==","Km0A5XyXnK8IRHX1","6mhb9ps2wvNJ+CYMJlN8X2v6XSHdzzPSDQ+S1G4nbOMCHo5uX4CbMR6bbPsWwJ2m"],"2026-11-08":["B3oH0xzFU7xOoxgno3IEHQ==","ooZHpxr2+wi2cR3s","d7CSN6rRI8MRR7dAHM9UXluCyT04v4p0RTF6UPvkGJmNpTD8m3Fmjy+6LO08aJPV"],"2026-11-09":["Oq6DxoNjezwmHsuQIJLG/A==","FHz/ihsPNclHCJ1d","HJ6T0qUsyvsG9SGVpL9wbXb5zTCBmQzX3dgLUniB3Fla/YTKMMEbtU5jnCBVz/pW"],"2026-11-10":["3u3sYptFjAZd6Q8u/lYNrA==","vklMrf2LEZCATtwn","5siteFUN65KWJ3q12s/PAIJsRr8D+/m+V7fmuUuYYzUFQFNlmVJ/FZ5foz5imJsm"],"2026-11-11":["ncgrlXg3+4eAWRw0pwMvBQ==","8TavZA0hGCLYHNYv","JsZH3s5ZqcpBVaiC4XZYy10COEjnVBMG83uyh5ctRSKLKocNfNba0fqV0OIKHD0A"],"2026-11-12":["8dR8ouhc9mSRjMmqm8N5lQ==","tIKU0EMT5/+7cQpC","yfdlvMWynoEE+xcoIxiYRoICVX/o4qipNzQKi03rPSAN4aQZr66ypOICg4b2dVoa"],"2026-11-13":["1Yd6RfY056mILGp+9cJV3w==","NoxKclX9pDr3aPlC","zdzGyORCyKB+iU7hCakRkL4Gw3YmV73fInzl/IBqEM6wqjpmvCAyhDxd9jbHxI3l"],"2026-11-14":["EooDnNDXur0DVXNNPor4+A==","/WSiTrC1+0ajoCIg","nGQozYMbncQPNkPzurzAr2LfA3rqbpJ2NCrIrdcGYeY2mOa13nT/l2HFtP7+cOkt"],"2026-11-15":["jK6R4gREZ/Yn678/QRxheA==","4HrRAefwUShDuGFT","lGZevooWmIgzdFWl4yFwSsRVkMCHk7Tk4XOCSehyvsdXQOXFcn80tBbY9XOIfvEx"],"2026-11-16":["T7F8Fy1ceyrsP7NCBZIfIA==","lqu+/+oTD874kPpX","L5kbmyAw0JA/buyFQfjn4rkrtY58j+FLiERyAYBqn9U0rO5tm9mtNQQdaK7XrB3G"],"2026-11-17":["6OeaJUKEOLf7+bjkIsfcJw==","zjVQd/8OT7K6VTt3","NNfgYeWDbWiQMIMpVP2YaOEItITGymtWl16irWqvJluuZxHzM2VMseIdQkKTLiqj"],"2026-11-18":["vkXkWDHjzvHelz9PGsDf3g==","SxmFeehg4VI6OTsI","RXssnmamDoxHc4J7i9wavnwO8Mp90OQRDomo760wViZYKa1MX7XgIaWxE66sQPGT"],"2026-11-19":["wSJvjGJGQJ+1bo5BrB/XRA==","7RpHhXUWFLfW7rMi","6akYQPQG3UZbBdx92GVoiGJu7SZkEYiU+MY46S8ZqtRQF1yqTbNa2sLfOulYVzUi"],"2026-11-20":["Zl2NTyKtJEYNGlqPUFieUQ==","/fZBFk0FeJp45iOh","0rDDrft3Nn8F5lmn4fYkkuIFtV/tUy0FHmBXeHTne73wRD+RqohuO7bAJLuWDSGc"],"2026-11-21":["bbeqBYSXv36MmBChLUj9qg==","AGkYTX7BwTLZf/iy","rH7Xom9mj6iJEyLyuPCw3U8lVs7IxcbLVCEgL8hhyLywHtZZm71RwtUErdcFlDRD"],"2026-11-22":["sgyv8gd9TgbF/XzaxdX4Hw==","PYgeUnkzl3kxnSOI","+hLbbzaSXyPQUK1CJKy+muC3G4cxXs/vb5AzEcP5rVrwc8Fc8IA1m3ztjV4dATjU"],"2026-11-23":["IvtpfIKWHH/m6+pC4iaPDQ==","bhDZM+F0IEgO+QJj","rNlyEzjAVn0//ogDaKVVueA+rKyiFn3hnBmPLcZM5EePvsVj9HIb+N15Nbal7qWe"],"2026-11-24":["FGMD+qC8b6Dx49JVgLk9Xg==","+gGLvFvHHhqyfAw4","LdE5fZioQiZ5SZkmJkektzNm8dT2+w7KqBjfvjhQYDL7JT+Nw3DojhlnJxYiEfkO"],"2026-11-25":["zsfqeLf3sl45uwSD8w9BYQ==","/iTBJqilYp3omHkp","8KxtS4VWUq2BMLzWimeILudXnelajH6lmOlYD5HT5RYjBF/iNYUAbADwqdCjn97w"],"2026-11-26":["89ZDeArY8qf+Et/EUNIHvg==","zqmWBGAbwqP0rQuX","0ucBtGqKcXNLmNSMPKER1hjhtE6SpY/S/E5bC2+zrVHoYyGPrvEgb9pqLiIy7ViN"],"2026-11-27":["C3M0f4ZqyiGwe0lSp8P4Vg==","Y0CDN96pOTNW3WdX","6OMGSIcoAzCbEIYZ/mdDqQvEsy9iuoqVGAYt+w8+So60blIuJ6Dyru/i43c3wFx8"],"2026-11-28":["UM6b+5ueL9Y90g0FKRl6pA==","HFSOcZkhyVGRNOlv","+7S248KsUfhdkrgdcabcORSaxYsoV5hsaw+Qr3mYPg0ejm488Kgq/w3fj9WBN6n8"],"2026-11-29":["58Ugqe0ptuK0RQr3YowaEg==","ydz5Zr210pco0Yi3","qyQi8kiBYOKKRZAduDoDmSJebcCZpnWkqAMMq6Z9yJIGznr3Qg6UgNEkfnlYuqJ6"],"2026-11-30":["a3MMkoXLo8TSS4jKTezkVw==","pAz1TLZ/ExJektx7","tcAoYjWuK3wX4G4MOeDGcTHe4/GzGq6VMQM0eedtXX8qu6X5RqgumUkn3zUIA7LO"],"2026-12-01":["UdX2RuBvFNjq153vTxtEdw==","Ci8kGdoT9S+It94d","VViJs1XM/9KNsp9TPqYjvv5/ORLIB2sMl+wgGlRPSv74CO74UW2tZ2Y4gAZejVkU"],"2026-12-02":["+n0wltc0Ol8EvZYcCamd8A==","Z40IOVM+S+l6pP9F","BnTg+YybI+LPioqRIA+f7U9n0rjU/BvkzArcEakbURdGHXzFflV9Js2WXpgXpknQ"],"2026-12-03":["OZfgAoZy5CkSWFTSuVUW2g==","+R0yK+t7vbt8S/uW","VBGUH/naLorqwolXZQ7w9MFeDtejNei5Eu5zaIFAQsqGdFqvcyjAaRlSXNRmusQn"],"2026-12-04":["XQlh/ZTei/0OmZcWh+L+/g==","WaV/kOK1WZOzw7+6","JXIDgnZxlNf+MIZm/CAbHaLiPgIVzy7jWPCS331TDQ45RkStcu6cGP9speCeV3FZ"],"2026-12-05":["8HBUUL4u+ej1LtuU9PAHTg==","Ta5kbCJuqEILTl0h","ky/LuOUXfOKy+5t9nkh9v6qDY7AzSzRcHxH6xSInnhL0LrN4hzwAQNSVnKJ8sA0R"],"2026-12-06":["qa767JDb0fhO9k33RRNOsA==","L5lT1lMiTNefTNTS","z+X46evu7JBDKTxfWQtF+W2ybrPH8fzutwLpsguFPSAcM7dp7cGx63ERvncQmMy/"],"2026-12-07":["yz+oHed6NrDzSxVi2qwfdw==","a5RNU6N0M+efWA24","qeAsfxo8e485p/1UrO1Z+xPdV5Vns2lsbBnYsqx3pzZV18kanr19nKGz4bIIreD+"],"2026-12-08":["cr1Etmsn5drS69NwhqZp8w==","sUotaqoPTGmjc2qh","HPovEG/gZSVDwldaG+T0Q2MIjH592gK70DAq+7zeJEXTwA2RK00Fhm+49ay6d9OB"],"2026-12-09":["DQFTle6uaug0K3VqePR/Fg==","TEbST6aX1HsmIWXS","ThOwFTAsgS8PiUIZ0dU1yTn/HQZWxTE0FkGOT+qWxaUa0lvY7DoCfmErbg0YPbId"],"2026-12-10":["h+e1pDm/uc1fd4Cokm6kzA==","4NhON9qOadCen4tm","gNmQz8cw1or9xkfdT9S0ZVbSvsm52eBg090OhCEWvQlhCbA2axmjmS0mE8aHDfpM"],"2026-12-11":["QQuRK1kl+ZNA5kP8Wfkr+w==","9EZHVA4dHER0u3cq","ddtpPb+5ZuAB2RcbLPgWLZNJDQ9qf4HHtzrB7TH3xkAepZPEk8VqV/YdM7i9yf2m"],"2026-12-12":["UxAXmOI2AQNvrc6SbfciTw==","WsX9U1RSa7tKGuIQ","DAGyKd2/v5gSmnr1Vv3LOKOzY7rvWYhhwadzw612N00ID7+zCcpFb8k4mlAAvTwl"],"2026-12-13":["fhnbXM98gTH+ATPthedQdQ==","ys4Y3Enr56YQk4Wg","Q0cSz7eGzR61AVu4jHcG7wPX0w49X4MtqCQtUu034xrNDiJjCXG1o3ZUELdCBuEq"],"2026-12-14":["ZMS9IaBrsRDKvIOuAbjP+Q==","nF+vINKGajAyhPZ3","fYOW1XA2zVOpJ1T8Qb8T3gzpNw0EO7HP4Kb3At5YcJmkRQHuVo4S7TNjBo0xFPAB"],"2026-12-15":["RfTFfRPwZfvKbX0zRy+tXw==","kVW01PFgw1CCHgJ6","DxScVEl3Zj0+KYf3zt/tK8wW572f71uHormopIKeypVD1puaSQpFH3P5rIroPZkn"],"2026-12-16":["uPpq54/Z8NybMUYtwJpUVA==","dhHFVrRU2z3J8bXa","rctwcnJaklwUsh4KdWN8sSSQofRFPQpSyFMw6x92KNI0hqMetuiJHuzhd27pnNgH"],"2026-12-17":["psonxXWvV20Bzf2nzyIfxg==","4MnTCsONxC0tdNoE","a6np14t/sub9Pr6A7YLM02S+yN8cBfJW2oCTKe0vk1k50S3nqD2Ww7RhtqafS9FR"],"2026-12-18":["wbBBI3dRQhcxwPDmbJ7/zQ==","ANP5fomYGpG2ClHm","hjMIl/oitncTcfw8gKtKVuUtRYUN4nItnol4Rvp61DxrxsTfoAI1ISf+y03c/bYG"],"2026-12-19":["FYtSXPHE6NKky1cXk1R4fQ==","RLodzarr6LWcLhAV","IiUMGaKTS3iMW+8ciuXtpE6rrnZ4TRZKjs0ZrM/U7pXBwu3Ts26/JR5Z4nUuCbLt"],"2026-12-20":["3r3Hxqe97xm32UrbHliP+g==","iOZGiSed84+rnsKY","oLdfU/Of6GrSY6BWYNNR+53bI4bQf0daHhXgtIcA/55nHb3BA26z94y3s/+9nnZV"],"2026-12-21":["VZL1rFUwsCf7wt1OhZNtCA==","jyaQrrf55xmFlXeJ","sr6FNI5uItppZljET/pHg2hrQp+Qa8u8gVWBDlptItufQsqb0+8pOWUCmxkfqiQ4"],"2026-12-22":["VAVOMVICUHvPqQ8dD3lJAQ==","Xq14oyP0pphlsAyX","oRyA7FDWSq311/c3rUQJl8NBMpKzwhChbh2bfn8LpI/L+tdvZPpYAf7FYyGUXvsZ"],"2026-12-23":["3PE626BRtuT9QsvKInLDOA==","XsPrf7FRwog7MN92","zPJrEGc/EL9C2m4nhvm9dQ1D2I51XoA1RmmrVT160didJ4e9sn/BpgPDJTjplVhX"],"2026-12-24":["OennSdIXyNkxT/MtulKbFg==","vSoJwJDJb72LsU2S","ZO/sOG8UHgLabJAD2Oy8eRZBVp+hiut+Mee1Lpl8xf2+u9xqsLH06JSAdyZA0F6v"],"2026-12-25":["e5H4/HlUR2FUH+VD1TmsWg==","Gy3x8me1cWDBAMf+","918LJXzRdcwl4ommQA5LP2urI+AWIZHUng9o/D4LNfbVzRCCqAUbF9Cpcy72L9Nu"],"2026-12-26":["tIhie7SYCel3D53sSFp5Fg==","VcBfRHuWNKm8NZ36","vR3tiHD474UZ20sd3FtObtYa08V2zmlmxqjlkJ0EG59HT4xWh/nt/KZSNZYJgB+y"],"2026-12-27":["kBqqBR0QqMv8DsEEWY3rzg==","bCm4Aa7cyajSIcIt","xyF+Y14ScDvYL3w7xtL965qhaSdvuv80DoLdmsbehg1pwp6ypEnGmigxuWxZJgFy"],"2026-12-28":["Gdhjw/iX0o4oCAA7i3kvSw==","xTtfkeS8kweiaZUQ","yYiCQIBLmpyx8/zGhtIsCHDbRc75tumj0cA4ss0Je/qUtNfcAscHNhYO00QQMR7U"],"2026-12-29":["A/k9UxmDMU4SHXlSuD4TyQ==","AceYxq7G4hs7rEhe","BpUFpTrXpLeSZNcNZT+aqO1OB+lW/FYOWLpszgqTpGLb0a8Qx07kW85ja6sLhHc6"],"2026-12-30":["DR2YxYAEp+4irrEG9hTmLw==","hVROMtdLP+lOjnZq","HkJ+G0qBCQgXjqWDUavVmpFoPkM1v7ZK+WdNhxfxD7/O2FAVRDwAjSjut6yf3peS"],"2026-12-31":["MUaEswA3zvqz2WNZyON1Ww==","2b2EcloSxJPIqlBp","iDWDMo55mARLFM6O0/yPv9soHHNTtrDOjBtzqyl0ROLz7ytusGFOpYqFYEUq8W8C"],"2027-01-01":["EyyyICEv2bz9M2XufWPkXA==","GX5KZVQ0gf/j82kE","lU3p5PtV7J09W13h5tBgnvReFh8wALrMecfuyqAVohQleiw3N4kpfG7SaxMa24eV"],"2027-01-02":["RcVSqQapTmGqrzab0kmG1A==","e865pF/e961Hkcy2","luxCRKzILa/hMZ/HKmZ+VFbjo1cSx7V1wxFF9O2kGj/sQwlctZQbiNH/kx3SociX"],"2027-01-03":["/6t8wmkMp/Z6jKwIjtHPIg==","HgpxZs88byh74ZGC","dH09j4MbsFWoGwTAAPHICo/0/WLkZoIjNv7LfhbJnwEwv5EuGq+PpSRGtRcr3x8c"],"2027-01-04":["ImJg0dtB6rkBn7vBarWvQA==","ifMzg/M76szj7mOq","p4m9S4yFz0KEkUFPMasasWZi6S14WW+ZTsMMUgvcEifx7m46LIVgn1INHDqSfLr+"],"2027-01-05":["MiclNMvh4NuZCRb/j1fWmg==","hWDiUhvYhyJEpCN7","gFvyBnWUOUWt3+mLW4Z4BrFXQhjb8+ru9hMXyzmBPoYLGb6AaVGTIdDOINfYurYY"],"2027-01-06":["zuVEAQjFN+N2j+7EFXpryQ==","3Z46k+JIXr7o67k2","5pAIl05wZ0Hbbbde0b7NZFeT0L6aOtRUNB6clCjsUWXkPV/pYijkKR0e3AX5vkQS"],"2027-01-07":["oklJz98DVJF5v7cAIhtL9Q==","n2Kfn0nLmYia77Fh","aiVjgi3S7N+ay43qe9YKsHMIvCXyRKHvKky9qqH3fqLTZQpmYEte/hu0LzCIVbkI"],"2027-01-08":["zkZ6xOtcrq74FWuuGwEgFw==","ir0XTgHgDXBxqjLs","XDEP08w7B4PBwvMC0sIFJgknWFwfoBQBrX/b5wq/7rGcOMwHjCs+xcFmmSodFqwd"],"2027-01-09":["UEPgTBYW8Z4kWMCafZ4GzQ==","2ENUSAqeBpDEEGfi","Fb2VbxmvNoIPV0Y/0X7B/uz1R9IjgzTNU2r6gZLN9lvE/jBzDUI0jxhzWwhgzvBu"],"2027-01-10":["cBQgFhQYLzQKRoZyU5a9BQ==","O3tJQ+eDHAeQYv8r","bFD0z0RUNcjTWj/yOx5HCXTIwOrjZgs7t+krki4lfUAufj0gDrH1UhFd6NRLmtsS"],"2027-01-11":["9t2ec80b1h6IVa5CyWWVZQ==","G8jaudMkNHLymwNv","J/iqqJuvIaERewQfIulp5BxvkGglZxdhXp6PKOHcbYTiBCalwKCyznYk5WCERvxi"],"2027-01-12":["wlrps48bMrx2lThp2qkw4Q==","/hMDfyd7HOjullYF","vjJgM2eN+EbjK4oZ9wHbQndQ8lRFIEyuTnFHv3IdgqJ2uFUmoLOwmEU96YQhyDw7"],"2027-01-13":["DmD2tvnHN+JEKxsWIU9u9w==","DPUzmID/p4k20r5k","VTI4eAPHqx68U77niBTAED756R2YVdmV7kNk/pH2LCnnKeZ9xu/RasMvv1Z6ekLK"],"2027-01-14":["oauTTPHMVDevEdhjpkS7Ag==","nYOTKyX3wpy/IPn3","QyJyuqErDRCogE1rc/+VibicnfRx5Xkba6JGWCioHh6ACgpYDH7vo8gbCPyLuFOf"],"2027-01-15":["pXztG0ZS1N5RQ2MxUmM1xw==","RiR49jE6gdVoEc4a","q8hmqoj7dgSRZzlxPcCzKp6QAi+jMs9aq48tQB2GX788u2q6iXZ4/UrqFGXy94ai"],"2027-01-16":["ePCLTL/Fco7TWA/L36tlIA==","Gk6ZqC3lF2JI82DK","DuxIe0B5nN1rEzBlJXUA4YlPMY3k3w2g8KRtfXyfItHcfk3+7980648kFJlcuTbP"],"2027-01-17":["dQOfusEtAVjau+lA9h1pLQ==","YYj/rZTbZt1gseoV","nTwggKIeIT0jjyyfgK09K6lrWsCmW9hkDWXS18kQgpF4IfZKBacUClrecDAmvaFX"],"2027-01-18":["1B+xIMe9u1nDEqOESfw2Rg==","4vIBohnNAgS2eLLi","7ZlzD2OvpQVJCc/2+c73I2dmb1IHB2tDisuVoEWjJyrx7nmHXfVZf83cyCQi0xzS"],"2027-01-19":["AyH2N9BcU77nd+2panOi+g==","bnia1xx8U8EsicQa","BqBqRvI+ZkfXb+5JNdGY6+bBpfyq4eibcMwT6PDmI/mlEAcySGxorU91TTBC/oB2"],"2027-01-20":["f88wKaXwMit51STQyIlROA==","cNP4nAJQHROrQdbi","bBZXAdI5dNJovhKio60AgdSGUcgyiiavFvkV1avQLG7uIxAFiD+DVx3wIzlmMdUT"],"2027-01-21":["gsyqZUrkLADqVB6m1KimYQ==","jJxPtZNNN8Y9DlmV","J+t0eBNZH+Xsso+xDE2CYHLTh8rqUW4jA/fskPpsFY1ZfMT/2gy6srl89YOTcb6b"],"2027-01-22":["0ABXnmw2y51c53MCs4Ljaw==","BrX2Fa1uqrP+9t9q","P3++OKpa673NcQHtHLja3ttgX6gbTaOn6gl/lHX8K/1DlWhr4HyFHLcMVT57lr3z"],"2027-01-23":["OgBMmV/t+gBG4HLkAgReNQ==","X8AuQI6NtmpqbsSb","sEKN6Y1sWHLAm5HBENI24o1q7NK0ugSgwLM42S8ouZa0wpp76/pFQF0N2qW6Mu6P"],"2027-01-24":["JHRLEbfR0X0wDTcGmrre6Q==","eBKQeROEavsQDyEK","LASW84eQycOodG0W1Uo+wSrb/L+6atESYJbFweqbuUP5o+oww1SWkJ5QBUzkRO84"],"2027-01-25":["C+hZMnvgMMFuQMG9ODgIdg==","wQ+OzF6CeQ+22Tco","7ePsQr97TwM3EWy56wlr3D7v4btt3jU34TB+9Fs+qwIrxY9mr2n/VnbzgcN6kmkE"],"2027-01-26":["hQ5k8NNPQ7bOG8aNK5tKfQ==","xugOPVjtnj7g1NI2","vP6lLFo016Q2ICcl7aC60W/RG1Yn6pqTbXCwzVXQADQK10EZ7yOIwTPmC99HTa8+"],"2027-01-27":["iMaEPCnhstHYypcLWIJD+g==","MMyAxBPbc83o+U6l","JwySXJ9o8hXku7a2dQkgDgeYMgFhrgOw19iBOxOuSvxmsKqV32jRSaTO4IAnJzkQ"],"2027-01-28":["zV3lpB3Obl5NgHQvpN/iaA==","jpLuFjFv7iYrVTX4","mfEvK2O/nHMXTzrfhrm/ubl3rqTzP6kYHDCdlHmJf7ahDQy5CuQ/G5Jue/oNDDvi"],"2027-01-29":["e9rB8Rq0TMJksAz9Mid1Kg==","T4/aNPLSJNdulVd7","6lp/y1kZUM72RELxhaXO4PifCPGqPjYKYLIPq9kJah84L9Nlw5fPiJ6tSLoU8SUZ"],"2027-01-30":["mXhEqXXnp8h39KlQms/HIQ==","8P7Mf/GDgTq3bcpC","gxIRYiuZe2HCT2jpxm7G+43Mc8oIeinH7ouDto0LVV4gKfqRhvPoAXh/bIOJHsiF"],"2027-01-31":["nsqemdd0wue39VU4Y2eXLw==","8qAR+3hy2Z/vZ9uW","LOJ7qL5+eKFbFYIIhA87xSVu/as0+Kf2m7wWea7Idp6NIyBQwojJPoggylZ9zaQD"],"2027-02-01":["YDCdmQRuvX9OG+ECI3KmwA==","LvwDfEexgHYnAX1D","PqNyoseyuhnRhBE5GVdnCRI49TizYabO6l1NxhC1HI2i6EbxZkfMfWOc+2+pLI2Q"],"2027-02-02":["HJzlMrqAK7EJkzK5UDaXTw==","ERPGkV2cklLFTD5X","W4cIkTUWDoVSr+CH2rZeMZo/kaA9GbX1VJKepl2LtRBiVNB5UjoLK4hr5QMwmbTI"],"2027-02-03":["hf3oIA0gf1BIdgY2K5vnJA==","I2zKMmobQHyFb6a/","D4ApBDhNquniQTBQsYIY6K+zeASGdvDjdanEdUfgDv1arOtW45QwV0RuPrkEsW4O"],"2027-02-04":["jr2x9W8I7cyOf4qpFYdhJw==","LN2CZTFXDl6KB7E5","lB5a9tCNAHdriP0IDwSrLBUX3hjCUwzXMg/3gq5LbppOEMnt6xBW+Qh1nkwTykB4"],"2027-02-05":["bhzpJaLHwTWSeWR5fpFAMQ==","cq5J7lKwoGV9cNRZ","QQPOnnRF7yw6LaT/tS2WfcSDeDgsSphnCGhdeTqjeQ3xRT7xRpsKvQD8Vw9DB6Xi"],"2027-02-06":["4TFzVm1ikKa4hgsdgOtzlA==","mdIfIW/PJZXDHCi/","5YUJh0vyskxlT9GTOoo1EKQQBNU7gntHzhNupPRjtUtv0i6vuiqQfl+zfbPwLnam"],"2027-02-07":["RdL+x6XR+tDZJsbfGA2xmg==","2dA9ojoKO9nPDJDA","kKl0tBNluCEsxvOeNXa9NEp5LQsOluX3HVYQTaGFbrP5Qio1g/lIOqjlO8N8j5iT"],"2027-02-08":["uAAhOCKoHcKvKQToGno/Ew==","Ej3TxZl6Kb+4kDml","QsVoLXgTIB89mazhfWOuqFo/Wkd/Rl2foDUqpnIlcsIQNt8mS1+39FbZSa8RsZyQ"],"2027-02-09":["37go5sI3Bxj2sTyb3oGZQQ==","uzB4srg3VZGsE982","Cw0DHEXAsd3xhic6NZo2XwUBjAhUi+c3Oxfb6RQYrlbNonaACB6933+uE/v3Rq9n"],"2027-02-10":["x4OLGyT1XPwmSbqQZR9Sxg==","Vtowh050zEZ2qBeo","Fh9+uJOT5xFaOlQQ7EoBBfhOhIw8uYq5rcPiGJoLc/D5XNtVUwuYB5CSNMMT6QeB"],"2027-02-11":["gN6MPg43sO/tyIz9DJx6MQ==","l0d3A0FaBdgL9smo","LzOu7LrsZryJUdoTjrFMf7o4LhsDu70wn8TjYANCbFCdJ3CRo+PPe4F4Yp3+bF5D"],"2027-02-12":["nCmEQ88ePBWzFsDVzZ0nVQ==","P5Wk5rz4MEwd+V/L","8anBuSJ4TyWi1zF5/z779HtMiSa36Thh5EucYG9voKBca8YGr7yqsqPUz8MW66nC"],"2027-02-13":["MCvHJ1tNNyuY2OS9BUvvpw==","8287nOtdVY7gLqf1","Fr4Y093PzUhMLJj4RY6IPFZYpTqrtvcoZXLW5DrJp3gRV9CGxzbJboswoQ/HP0qE"],"2027-02-14":["H6tPZ3yeigrWh41xHxz3Ug==","oA4A57TkDJstwqg7","S66IsTQvWzddKirOR959Tw/LxInRpQ5soFfvsK9H3saUjxTQPqkWDf5nHtICX76V"],"2027-02-15":["AS8ncmvBgrazdidAAOJ64g==","kTlcZkShaX4j34dZ","WLIp0Vvgcx2vCKsnOfeHiisLsN9pJquv2hIH2+ctmvU2Kmrm4jZsMs0sBQvHN+5H"],"2027-02-16":["FvigC3A7DdFNGbUU7JTWZQ==","mhyx2S+i+amnoIH2","GFvMvWFncYixeD6nCUiF+l/NXG2rUGHe4k7QgAOuaX17Q6JCV9ubF0LI4WMw7n5m"],"2027-02-17":["svLsZ6ATWwRAKaDrBVazVA==","Z3+LZkgQlvAQYqhA","5FKTEII+keulBpYDZlhBgMvmtcYCaJW5P0iJUFBCc64FslkDr8kArqS/1MvPTshp"],"2027-02-18":["omFTDfk+MDOtcHRQ465/nA==","wMVOVe7VJFYzS9cI","7RmIOXTXB3qqzBqx15FqPG3eR2bZKjAu/l1koSD8R7jBj5d3bV61UFBlNXmKiFwg"],"2027-02-19":["nbwGwIFa2p3gF+iOYGduKQ==","0Qv3eR7LBH8KvkOv","oa1r3oDiaeEvB06PV+u822g+PbdXrSlHu/2u624EgR1MuHJsIH6C/l4kEnrMd97Q"],"2027-02-20":["j4gckTBq+KSE9PGzMxhJqQ==","An2rp29oaJf+8mmg","XlgYP32eWrR/BqoR97ENoMbvWr2iFyMhHR2RdSK9fkLN6mOnaZ6jr9Msyh8UJ2zn"],"2027-02-21":["AsAWnEfWfYFFUbHTrL3gbQ==","e+DNHb5/eCoo7pnq","cVAt404w2NjBVvt2ixsvMCy9pomcrtPMAG5wfpNNHbmbmSf0ZMpz9aYP+PmvT9vJ"],"2027-02-22":["epIrcprH1akw+Jldwa876Q==","ByZ7Yf4MP73nsBdL","Cha6nOLhupd/r0kYgxnggFHTAEqOplu7ooNiWf1IL1uG42aR1/AyvTZNMjWJZRIp"],"2027-02-23":["/KzVpv0lmxVT0zVi6cF9cQ==","OpN/rgWF9ORizokh","/RqNhu4H9xkFxw5DbHhdJruz2eyk9Gh5C1jah9P2G3I3JGkCpbtAkQ0XR8kJWjDB"],"2027-02-24":["F3XjFPb52eVASI7aIZZ5WA==","ZfLYIwMdd9VcUWXa","PamIaWJmkd8ODAWTmdkXvbvyStDFfLqthR1GnXVFooIGraOSvLPUo/XoEdKtlHCS"],"2027-02-25":["Yd+YiePx8coFmdsHmk55Ng==","rxyS/Js10BgluiaK","C/oKZ92qwUh/i9U2x2wxHZi6Ntb8Hld9EX85pFafRqw2Nm1mZ/F+sNnAYWmNZHS8"],"2027-02-26":["C5JtCDFNGm7YJ0A7sYlnlg==","7nzOm4eiT3neo1Up","MqQIhUXcSxeoAw12YD0qhex+LXb3AhJ0G21dm+IOd4eAT/6m2XzmPWt0hAMwDCIz"],"2027-02-27":["zCOIO4pcbmhRxaZ7DLJE8A==","aghrvU5sMqoQQsq0","GNJ1RPeDiktob644WlkjVf0NEYSIyYjIX8DQxqESJd/bxXr6LkJiqCDmxt09ecfd"],"2027-02-28":["9kvtNyxbkAbI0LecpBBZ1A==","2YZlipY2zNhc3XgW","sGlr8jTy9SRIh/m45EdAQ1Sld8lyEjZ2Mc5kjdkyVBpTqdw10fOjGzof4pFKV/Bx"],"2027-03-01":["DzG4s3HqUzVdqv38cFXx7w==","P3U4WZjHJZm/0dxp","zAWtYV9suuzDYt9U/41MGeYohvbwM0oKcMxX2i/BXs2hJ+4OOPgPeAhgjOj/Lr8d"],"2027-03-02":["BEKRJEqbnbsCNC43mqEd6g==","omp8zR80rt119hV8","TeRjTV5Yyuo0rH23762oqS0WvEDz0WAY0X6UxeB0dn0EJrindgVXcjw1ZWcI0DzB"],"2027-03-03":["/neyoFiJ1kcLF8+7fw1Y9Q==","gQSDdPK1HPNUDBpT","aGCLDsEGWr1033+lcqnEDY/lQbYBXw+4qTHS1E5zxYHCahsPVKswmiqxPmdC2D+m"],"2027-03-04":["J6Jtih/1MRgtJZQOKRGHXw==","ClZupZbrD2pfJaWj","qiDpnZUnTQPbjCwpNOrMkxwd2TSr/L0HApOuY3W55LodjzJXtJCL4vUWUDeAF4Le"],"2027-03-05":["eF4B3rV5RFkgPbcL+k068A==","UwPlGKUo6w/g6wkF","rNZsNn3xBi3GVe1DDj2lrmS6gpC7Z9CSRL2KVMFxMuY6UnnVeINfSGscVReNRyT/"],"2027-03-06":["AzbngKd6723HyUatd5KhJA==","7n9by4Wg1MRPhmOr","RkLpG3dwHkH/9oO0BMp4yrkS5fd0GFE37l11v9KryAKpPUsrRtUVM+L+8HiSNj6l"],"2027-03-07":["qW+bdA7z3Gfm3milTMdIPw==","wQk4JcVQu5KzJz1E","JXHCwM+tzUAYf7U1Ta2LSNIF6jjdL/lpWRss0Vh/4tzUT95aBdRP5XZP9GtyboYn"],"2027-03-08":["8YuiTptEwiKU4fJC49i/aQ==","zt7S0LLGTi/bocbj","4RBPqCPaFqedKqJE52w4VvQFx/TjyjU9I8pr9E3G6lZqWuFwdtBr7DFZoQtHLpyP"],"2027-03-09":["kx0y6OpNSPgR5lEhwZmDww==","iQbI4YdGgM18cVe7","KBpDBKRQqy3l0097k3Gs1m/iRUNvwuRJw3PGvT4kKWEz51d5Un3NCIpPgJzCTauf"],"2027-03-10":["kCi2aawigQTicPuqiSqwGg==","j2VTYmOakXrWroW7","1RMDlGIZI9NUvUp9jipyidNYRC2xThbeHyw1hLoiTVuYm2D/N0FU6NlpsfqJ5go9"],"2027-03-11":["SQv4TY2ZovYxZkdTY6bLoQ==","zNkd4v1HZdmhfh2c","+fhebMtY7I0ZiV/pYgMDUjrvvoHEL1yPMv9R2VRZwZ1R5oHOMJFWKzaLz8QBtU4c"],"2027-03-12":["YM9yY/WkafK3dPiNPrL63Q==","SAR3QuewN3GJOrsT","ITp6N9Q4x2/6b7+Zx7EvvCNO5SFOlk3x4Sxu/esAsp2QUwYgT382ooUFjOCiG0y9"],"2027-03-13":["EceiAcRzLCJhbOun7Es/nA==","g91b1ubqOSYyjpZX","EQ4mwIHNktYR6r2FhEhgY0QxXBqA+BiaB0Ucv84oXLEAGR53q9rZK1dgwik/0iXH"],"2027-03-14":["mCcy24JOt0rUXfJCbD9nDQ==","u43gnpMH0hHEOTGi","h95AvZiusanoSz0FFcmO44+6yKjQU1b6GIvGHksB3oeaAOmVlPtdtAheXQp8gDh4"],"2027-03-15":["61hNInUKGvXSWIQ1ke2h7A==","EuoikakPWu6DH605","GI0prTp9/e32tm0BfVFNctwI64qKMxhsETtytzyeyic7iip7/uzr1hrQyHvZOqpD"],"2027-03-16":["DJYbw9v/Dhyrtb22bsHrZg==","gi8loekBCVd32j4T","9hn1djSuetTeQU74TIg8yChz9xKPM2S4zZiUv8bOiMxjqMtz+hWnfNAamCx1tFlB"],"2027-03-17":["MiphETO+f0XPq+8ZSGAM1g==","u60cS8nkqlk3zVWO","fdVRpCiNypXlLhr07K2mzVunubh0BOLslpVxIf2m64Q1tptTL1DQWaTHOZa+ET8r"],"2027-03-18":["iwRylhwjmqDGOthl7TAbyw==","XRodtUnYDfsY6EWo","fuvL2TE+Z/SH7qMXuE77CWkwy5YTFUKMTXuveTdcdxtjrZB57DQjYTO5RqQXg5WS"],"2027-03-19":["Ac0vV8enffc01XMwi5nWjA==","cv/IlteqxS916GZA","wD5OSYuEdoNZ54QXz/pilmvpp1Q3NpJWM/w4l4MgvWCEum0fhVt0Z2u03G+Y7+C/"],"2027-03-20":["7PlUPoQ8Wi1E8VW+5BOpxA==","Q8nqU/P3vmvr/E3d","lnToB5X9jV1noKkvJmkeRVoNDHeqSDjr4FMm2Jv+YJP6WAzfORHgs4pFG6YIxUhD"],"2027-03-21":["vQqaSky+jeuJpfhFZkZnyg==","yHDDj51zcsNJTIsE","ZIDAAanzOwe1cidVQw9Cg+INSlxKc7x2itBLt6nAhgysuUxkQVcAiUA14RigwhJ7"],"2027-03-22":["djjxSTLd/MOBVg+CqsI39w==","WTIRMHNnh7XGeAoI","h2XDFg5YoB0id054q2P4/lAQ4l/c9QkTaMEobiOU4LeGRntbhtJHCJvA0/sT5OEA"],"2027-03-23":["ShRwnOZN87ukgDDUM2w16g==","4ClU1JQQImBlTwv7","tuNGQoiDtPsBVqHL23sN8ARLr6rgbW9oeQ2x3umImAu/16KAc0EORNf3eUe0adw3"]};
+const ITER = 250000;
+const SHIM = (function (V, SRC, patch) {
+  var ENC = new TextEncoder(), DEC = new TextDecoder();
+  function key(u) {
+    if (u == null) return null;
+    u = String(u);
+    if (/^(data|blob|about|javascript|https?):|^\/\//i.test(u)) return null;
+    u = u.split('#')[0].split('?')[0].replace(/^(\.\/)+/, '');
+    return V.files.has(u) ? u : null;
   }
-  // Schnelle Spritzer: neben dem Hauptstrich 2 bis 5 sehr kleine Striche mit minimaler Streuung
-  if(style!=='alt'&&p.subStreaks>0&&spd>.45&&vt>40){
-    const ns=Math.round(p.subStreaks*rnd(.6,1.6)*clamp((spd-.45)/.4,0,1)),px=-Math.sin(dirA),py=Math.cos(dirA);
-    for(let i=0;i<ns;i++){const off=rnd(-.9,.9)*R*.8,fw=rnd(-.2,.8)*R,a2=dirA+rnd(-1,1)*p.subSpread,l2=R*rnd(.5,1.5)*(.5+spd),w2=R*rnd(.035,.08);
-      const at=tailShape(d.x+px*off+Math.cos(dirA)*fw,d.y+py*off+Math.sin(dirA)*fw,a2,l2,w2,p,k,0);
-      if(Math.random()<.5){const q=at(1);dot(q[0]+Math.cos(a2)*w2*3,q[1]+Math.sin(a2)*w2*3,w2*rnd(.8,1.4),p,k)}}
+  function text(k) { var f = V.files.get(k); if (!f.text) f.text = DEC.decode(f.bytes); return f.text; }
+  function url(k) {
+    var f = V.files.get(k);
+    if (!f.url) { f.url = URL.createObjectURL(new Blob([f.bytes], { type: f.type })); }
+    return f.url;
   }
-  c.restore();
-  blobRuns(d.x,d.y,R,r,p,dirA,E,vt,d.col);
-}
-// Blutfilm und Läufer an einem Fleck (Mitte x,y, Radius R, Tropfenradius r): wird von Tropfen und Vorlagen gleich benutzt
-function blobRuns(x,y,R,r,p,dirA,E,vt,col){
-  const prevThk=thkAt(x,y),wetPrev=wetAt(x,y);
-  const th0=clamp(r*r*r/(R*R*1.4),.05,3.5),cr=Math.min(12,Math.ceil(R/CS)+1);
-  for(let iy=-cr;iy<=cr;iy++)for(let ix=-cr;ix<=cr;ix++){const dx=ix*CS,dy=iy*CS,u2=(dx*dx+dy*dy)/(R*R);if(u2<1)thkAdd(x+dx,y+dy,th0*(1-u2)*.9)}
-  addWet(x,y,.6);bloodTotal+=r*r*r;
-  const Vc0=lerp(8,400,p.adhesion),Vh=r*r*r*p.retain*(1+p.wetBoost*prevThk*.8);
-  const gain=p.runChance*1.6*(1+p.coupleRun*(p.amount-1));
-  const pRun=clamp((1-Math.exp(-gain*Vh/Vc0)+p.wetBoost*.35*prevThk+p.wetBoost*.15*wetPrev)*(1-p.runCut),0,1);
-  if(Math.random()<pRun){
-    let n=clamp(Math.floor(1+p.runCount*Math.log2(1+Vh/(Vc0*1.5))),1,7);n=Math.max(1,Math.round(n*(1-.6*p.runCut)));
-    for(let i=0;i<n&&slides.length<300;i++){
-      const u=Math.sqrt(Math.random()),ang=rnd(.15,Math.PI-.15),sx=x+Math.cos(ang)*R*u*.9,sy=y+Math.sin(ang)*R*u*.7+R*.1;
-      const th=thkAt(sx,sy),V0=Vc0*(.25+4.5*th)*(.6+.4*p.retain);
-      slides.push({p,x:sx,y:sy,vx:Math.cos(dirA)*vt*.05*Math.min(1,E),V:V0,V0,age:0,px:0,py:0,stuck:0,go:true,seed:Math.random()*100,col,len:0,bx:x,by:y,bR:R});
-    }
+  function build(k, qs) {
+    var t = text(k);
+    t = t.replace(/location\.search/g, 'window.__QS');
+    t = t.replace(/<script type="module"[^>]*src="([^"]+)"[^>]*><\/script>/g, function (m, p) {
+      var kk = key(p); if (!kk) return m;
+      return '<script type="module">' + text(kk).replace(/<\/script/gi, '<\\/script') + '<\/script>';
+    });
+    t = t.replace(/(\ssrc=)"([^"]+)"/g, function (m, a, p) { var kk = key(p); return kk && !/html/.test(V.files.get(kk).type) ? a + '"' + url(kk) + '"' : m; });
+    t = t.replace(/url\('([^')]+)'\)/g, function (m, p) { var kk = key(p); return kk ? "url('" + url(kk) + "')" : m; });
+    var boot = '<script>window.__QS=' + JSON.stringify(qs || '') + ';(' + SRC + ')(parent.__VFS,parent.__SHIMSRC,true);<\/script>';
+    if (/<head[^>]*>/i.test(t)) t = t.replace(/<head[^>]*>/i, function (m) { return m + boot; });
+    else t = boot + t;
+    return t;
   }
-}
-function altHit(d,p){ // wie fx.ts wallSplat0 (Ist-Zustand)
-  const c=sc,big=d.r>2.9,size=d.r*(big?rnd(1.2,1.9):rnd(.5,.9));
-  c.fillStyle=colr(p,rnd(.6,.92),rnd(.9,1.2));
-  for(let i=0;i<(big?5:2);i++){c.beginPath();c.ellipse(d.x+rnd(-size*.5,size*.5),d.y+rnd(-size*.5,size*.5),size*rnd(.45,.9),size*rnd(.35,.8),rnd(0,3),0,6.3);c.fill()}
-  for(let i=0;i<(big?6:1);i++){const a=rnd(0,6.3),r=size*rnd(.9,2);c.beginPath();c.arc(d.x+Math.cos(a)*r,d.y+Math.sin(a)*r,rnd(.4,1.2),0,6.3);c.fill()}
-}
-function blob(x,y,R,tilt,dir,p,k,rimK){
-  const c=sc,n=34,pts=[],seed=Math.random()*50,e=1+tilt*.9,eb=1/Math.sqrt(e);
-  for(let i=0;i<n;i++){const a=i/n*Math.PI*2,rr=R*(1+p.rough*(fbm(Math.cos(a)*1.3+seed,Math.sin(a)*1.3+seed)-.5)*1.6+p.rough*.12*Math.sin(a*7+seed));const lx=Math.cos(a)*rr*e,ly=Math.sin(a)*rr*eb;pts.push([x+lx*Math.cos(dir)-ly*Math.sin(dir),y+lx*Math.sin(dir)+ly*Math.cos(dir)])}
-  c.beginPath();pts.forEach((q,i)=>i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));c.closePath();
-  c.fillStyle=colr(p,1,k*.92);c.fill();
-  if(p.centerLight>0){const g=c.createRadialGradient(x,y,0,x,y,R*e);g.addColorStop(0,colr(p,p.centerLight*.55,k*1.5));g.addColorStop(.7,colr(p,p.centerLight*.2,k*1.3));g.addColorStop(1,colr(p,0,k));c.fillStyle=g;c.fill()}
-  if(p.rim>0){c.strokeStyle=colr(p,.85*p.rim,k*.55);c.lineWidth=Math.max(.8,R*.16*p.rim*rimK);c.lineJoin='round';c.stroke()}
-  if(p.gloss>0){gc.save();gc.globalAlpha=p.gloss*.55;gc.fillStyle='rgba(255,170,170,.5)';gc.beginPath();gc.ellipse(x-R*.25,y-R*.3,R*.28,R*.14,-.5,0,6.3);gc.fill();gc.restore()}
-}
-function spine(x,y,a,r0,len,w0,p,k){
-  const c=sc,ca=Math.cos(a),sa=Math.sin(a);
-  const one=(r1,l1,w1)=>{const x0=x+ca*r1*.8,y0=y+sa*r1*.8,x1=x+ca*(r1+l1),y1=y+sa*(r1+l1);c.fillStyle=colr(p,.92,k*.95);c.beginPath();c.moveTo(x0-sa*w1,y0+ca*w1);c.lineTo(x1,y1);c.lineTo(x0+sa*w1,y0-ca*w1);c.closePath();c.fill();if(Math.random()<.75){c.beginPath();c.arc(x1+ca*w1*1.5,y1+sa*w1*1.5,w1*rnd(.5,.9),0,6.3);c.fill()}};
-  if(p.gapChance>0&&len>12&&Math.random()<p.gapChance){const l1=len*rnd(.5,.72),gap=clamp(w0*1.6+3,3,9);one(r0,l1,w0);one((r0+l1+gap)/.8,len*rnd(.2,.38)-.2*(r0+l1+gap)/.8,w0*.55);return}
-  one(r0,len,w0);
-}
-function tailShape(x,y,a,L,w,p,k,bend=0){ // verjüngter Strich entlang einer leichten Kurve (bend = Durchhang nach unten); optional mit kurzer Unterbrechung
-  const c=sc,ca=Math.cos(a),sa=Math.sin(a),sag=bend*L*.7;
-  const P0=[x,y],P1=[x+ca*L*.55,y+sa*L*.55+sag*.12],P2=[x+ca*L,y+sa*L+sag];
-  const at=t=>[(1-t)*(1-t)*P0[0]+2*(1-t)*t*P1[0]+t*t*P2[0],(1-t)*(1-t)*P0[1]+2*(1-t)*t*P1[1]+t*t*P2[1]];
-  c.fillStyle=colr(p,.93,k*.95);
-  const seg=(t0,t1,w0,minW)=>{const N=12,L1=[],R1=[];for(let i=0;i<=N;i++){const f=i/N,t=t0+(t1-t0)*f,q=at(t),q2=at(Math.min(1,t+.02)),q1=at(Math.max(0,t-.02));let dx=q2[0]-q1[0],dy=q2[1]-q1[1];const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;const ww=w0*Math.pow(1-f,.9)+minW;L1.push([q[0]-dy*ww,q[1]+dx*ww]);R1.push([q[0]+dy*ww,q[1]-dx*ww])}
-    c.beginPath();L1.forEach((q,i)=>i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));for(let i=N;i>=0;i--)c.lineTo(R1[i][0],R1[i][1]);c.closePath();c.fill()};
-  if(p.gapChance>0&&L>14&&Math.random()<p.gapChance){const t1=rnd(.45,.8),gt=clamp((w*1.5+3)/L,.03,.2),t2=Math.min(1,t1+gt+rnd(.2,.4));seg(0,t1,w,.3);if(t1+gt<.98){seg(t1+gt,t2,w*.55,.2);return t=>at(t2*t)}return t=>at(t1*t)}
-  seg(0,1,w,.25);return at;
-}
-function dot(x,y,r,p,k){if(r<.25)return;sc.fillStyle=colr(p,rnd(.6,.95),k*rnd(.85,1.1));sc.beginPath();sc.arc(x,y,Math.max(.35,r),0,6.3);sc.fill()}
-// ---------- Läufer ----------
-function slideStep(s,dt){
-  const p=s.p;s.age+=dt;
-  const visc=p.visc*(1+s.age/p.dryTime*3);
-  const pn=pinAt(s.x,s.y),wt=wetAt(s.x,s.y),tk=thkAt(s.x,s.y);
-  const Vc=lerp(8,400,p.adhesion)*(.55+.9*pn)*(1-.55*wt)*(1-.2*Math.min(1,tk));
-  const ratio=s.V/Vc;
-  if(ratio<1){ if(ratio>.7&&Math.random()<.5*dt*10){/* kurzes Weiterrutschen */}else{s.go=false;return}}
-  let v=p.speedScale*68*Math.pow(ratio,.55)/visc*(1+.9*wt);v=clamp(v,0,300);
-  // seitliche Bewegung: Schlängeln + nasse Nachbarspuren anziehen
-  const gl=wetAt(s.x-5,s.y+4),gr=wetAt(s.x+5,s.y+4);
-  s.vx+=((fbm(s.seed+s.y*.02,s.x*.02)-.5)*p.wobble*900*(.5+pn)+(gr-gl)*p.mergePull*500)*dt;
-  s.vx*=Math.max(0,1-4*dt);
-  const nx=s.x+s.vx*dt,ny=s.y+v*dt,ds=Math.hypot(nx-s.x,ny-s.y);
-  const w=clamp(Math.cbrt(s.V)*.55*p.trailW*p.runSize,.7,s.wMax!==undefined?Math.max(.7,s.wMax):9);
-  // Spur zeichnen
-  sc.save();sc.globalAlpha=p.alpha;sc.strokeStyle=colr(p,.92,s.col*(.9+.2*Math.min(1,wt)));sc.lineWidth=w;sc.lineCap='round';sc.beginPath();sc.moveTo(s.x,s.y);sc.lineTo(nx,ny);sc.stroke();sc.restore();
-  if(p.gloss>0){gc.save();gc.globalAlpha=p.gloss*.28;gc.strokeStyle='rgba(255,140,140,.8)';gc.lineWidth=Math.max(.6,w*.2);gc.lineCap='round';gc.beginPath();gc.moveTo(s.x-w*.2,s.y);gc.lineTo(nx-w*.2,ny);gc.stroke();gc.restore()}
-  // Perlen
-  if(p.bead>0&&Math.random()<p.bead*ds*.05){sc.save();sc.globalAlpha=p.alpha;dot(nx+(Math.random()<.5?-1:1)*(w*.9+rnd(0,2)),ny,rnd(.5,1.4),p,s.col);sc.restore()}
-  // Aufnahme aus dickem Film und Verbrauch (nasse/dicke Wand trägt den Läufer weiter)
-  if(tk>.05&&p.pickup>0){const take=Math.min(tk,1.2)*w*ds*.12*p.pickup;s.V+=take;thkAdd(s.x,s.y,-take*.01)}
-  s.V-=w*ds*.5*p.film*(1-p.wetCarry*Math.min(1,wt+.3*tk));
-  thkAdd(nx,ny,.04);
-  addWet(nx,ny,.35+.4*Math.min(1,w/4));
-  s.len+=ds;if(s.bR!==undefined&&s.ex===undefined&&Math.hypot(nx-s.bx,ny-s.by)>s.bR*.85){s.ex=nx;s.ey=ny;s.ew=w;s.len0=s.len}
-  s.x=nx;s.y=ny;s.px=s.x;
-  if(s.y>=FLOOR-2){floorPool(s.x,s.V,p);s.go=false;s.dead=true;return}
-  if(p.ledge&&s.y>=ledgeY()-2&&s.x>ledgeX0&&s.x<ledgeX1&&s.y<ledgeY()+6){ledgeIn(s,p);s.go=false;s.dead=true;return}
-  if(s.x<10||s.x>W-10){s.go=false}
-}
-// Am Fleckrand wird die Basis zum Läufer hin ausgezogen (Trichter mit geschwungenen Seiten), nur auf 1/20 der Laufstrecke
-function neck(s){
-  if(s.ex===undefined||s.len0===undefined)return;const total=s.len-s.len0;if(total<8)return;
-  const p=s.p,Ln=clamp(total/20,1.5,40),w=s.ew,x=s.ex,y=s.ey,c=sc;
-  const e=Math.max(Ln*1.6,w*1.4),bR=(s.bR||10)*.95,dyc=y-e-s.by,room=Math.sqrt(Math.max(0,bR*bR-dyc*dyc))-Math.abs(x-s.bx);
-  const Wb=Math.max(w/2+.6,Math.min(w/2+Math.max(1,Ln*.45),room*.9));
-  c.save();c.globalAlpha=p.alpha;c.fillStyle=colr(p,.93,s.col*.95);c.beginPath();c.moveTo(x-Wb,y-e);c.quadraticCurveTo(x-w/2,y-e*.2,x-w/2,y+Ln);c.lineTo(x+w/2,y+Ln);c.quadraticCurveTo(x+w/2,y-e*.2,x+Wb,y-e);c.closePath();c.fill();c.restore();
-  if(p.gloss>0){gc.save();gc.globalAlpha=p.gloss*.1;gc.strokeStyle='rgba(255,150,150,.8)';gc.lineWidth=Math.max(.5,w*.12);gc.lineCap='round';gc.beginPath();gc.moveTo(x-Wb*.9,y-e);gc.quadraticCurveTo(x-w/2-.3,y-e*.2,x-w/2-.3,y+Ln*.7);gc.moveTo(x+Wb*.9,y-e);gc.quadraticCurveTo(x+w/2+.3,y-e*.2,x+w/2+.3,y+Ln*.7);gc.stroke();gc.restore()}
-}
-function stampHead(s){
-  const p=s.p,r=Math.min(Math.max(1,Math.cbrt(s.V)*.8*p.runSize),s.wMax!==undefined?Math.max(.8,s.wMax*.6):99);sc.save();sc.globalAlpha=p.alpha;sc.fillStyle=colr(p,.95,s.col*.95);sc.beginPath();sc.ellipse(s.x,s.y+r*.2,r*.85,r,0,0,6.3);sc.fill();sc.restore();
-}
-function floorPool(x,V,p){const r=Math.max(2,Math.cbrt(V)*1.6);sc.save();sc.globalAlpha=p.alpha;sc.fillStyle=colr(p,.9,.8);sc.beginPath();sc.ellipse(x,FLOOR+rnd(3,9),r*1.4,r*.4,0,0,6.3);sc.fill();sc.restore()}
-function ledgeIn(s,p){
-  let pl=pools.find(q=>Math.abs(q.x-s.x)<24&&q.p===p);if(!pl){pl={x:s.x,V:0,p};pools.push(pl)}pl.V+=s.V;
-  sc.save();sc.globalAlpha=p.alpha;sc.fillStyle=colr(p,.9,.85);sc.beginPath();sc.ellipse(pl.x,ledgeY()-1,Math.min(40,3+Math.cbrt(pl.V)*1.3),2.2,0,0,6.3);sc.fill();sc.restore();
-}
-// ---------- Quellen ----------
-function spawnLeak(l){const p=l.p;if(slides.length<260)slides.push({p,x:l.x+rnd(-1,1),y:l.y,vx:0,V:p.leakVol*p.amount*rnd(.7,1.3),V0:p.leakVol*p.amount,age:0,stuck:0,go:true,seed:Math.random()*100,col:rnd(.9,1.1)})}
-// ---------- Simulation ----------
-function step(dt){
-  T+=dt;
-  for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.vy+=G*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;d.wallT-=dt;
-    if(d.wallT<=0&&d.y<FLOOR-6&&d.wallT!==-9){drops.splice(i,1);hit(d);continue}
-    if(d.y>=FLOOR||d.x<4||d.x>W-4){drops.splice(i,1);if(d.y>=FLOOR){floorSplat(d)}continue}
+  if (patch) {
+    window.__VFS = V; window.__SHIMSRC = SRC;
+    var of = window.fetch.bind(window);
+    window.fetch = function (u, o) {
+      var k = key(u && u.url ? null : u);
+      if (k) { var f = V.files.get(k); return Promise.resolve(new Response(f.bytes, { status: 200, headers: { 'Content-Type': f.type } })); }
+      return of(u, o);
+    };
+    var ox = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (m, u) { var k = key(u); var a = Array.prototype.slice.call(arguments); if (k) a[1] = url(k); return ox.apply(this, a); };
+    var patchSrc = function (P) {
+      var d = Object.getOwnPropertyDescriptor(P, 'src'); if (!d || !d.set) return;
+      Object.defineProperty(P, 'src', { get: d.get, set: function (v) { var k = key(v); d.set.call(this, k ? url(k) : v); }, configurable: true, enumerable: true });
+    };
+    patchSrc(HTMLImageElement.prototype); patchSrc(HTMLMediaElement.prototype); patchSrc(HTMLSourceElement.prototype);
+    var sa = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (n, v) {
+      if (n === 'src' && (this instanceof HTMLImageElement || this instanceof HTMLMediaElement || this instanceof HTMLSourceElement)) { var k = key(v); if (k) v = url(k); }
+      return sa.call(this, n, v);
+    };
+    var di = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
+    Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
+      get: function () { return this.__vs !== undefined ? this.__vs : di.get.call(this); },
+      set: function (v) {
+        var k = key(v);
+        if (k && /html/.test(V.files.get(k).type)) {
+          this.__vs = String(v);
+          var q = String(v).split('#')[0].split('?')[1];
+          this.srcdoc = build(k, q ? '?' + q : '');
+        } else { this.__vs = undefined; this.removeAttribute('srcdoc'); di.set.call(this, v); }
+      }, configurable: true, enumerable: true
+    });
   }
-  for(let i=slides.length-1;i>=0;i--){const s=slides[i];if(s.go)slideStep(s,dt);if(!s.go){if(!s.dead)stampHead(s);neck(s);slides.splice(i,1)}}
-  for(const pl of pools){if(pl.p.ledge&&pl.V>pl.p.drip){const r=Math.cbrt(pl.V*.45);pl.V*=.55;const d={x:pl.x,y:ledgeY()+4,vx:0,vy:20,r:clamp(r*.8,1.5,9),p:pl.p,wallT:-9,col:1};drops.push(d)}}
-  for(const l of leaks){l.t-=dt;if(l.t<=0){l.t=1/l.p.leakRate*rnd(.7,1.3);spawnLeak(l)}}
-  if(art){art.t-=dt;if(art.t<=0){art.t=1/art.p.artHz;shoot(art.x,art.y,art.dx*art.p.artPower,art.dy*art.p.artPower,art.p,Math.max(4,art.p.count))}}
-  if(P.auto){autoT-=dt;if(autoT<=0){autoT=rnd(.25,.9);const p=pOf(rnd(0,W));const a=rnd(-Math.PI,0)+rnd(0,Math.PI*.6);shoot(rnd(100,W-100),rnd(120,FLOOR-200),Math.cos(a)*rnd(300,1000),Math.sin(a)*rnd(300,1000)*.6,p,p.count)}}
-  // Nässe trocknet
-  const dry=dt/Math.max(2,P.dryTime)*1.6;for(let i=0;i<wet.length;i++){if(wet[i]>0)wet[i]=Math.max(0,wet[i]-dry*(.5+wet[i]));if(thk[i]>0)thk[i]=Math.max(0,thk[i]-dry*.35)}
-  // Nachdunkeln und Glanz
-  gc.save();gc.globalCompositeOperation='destination-out';gc.globalAlpha=Math.min(1,dt/Math.max(.5,P.glossTime)*1.2);gc.fillStyle='#000';gc.fillRect(0,0,W,H);gc.restore();
-  if(T-lastAge>2){lastAge=T;if(P.age>0){sc.save();sc.globalCompositeOperation='source-atop';sc.fillStyle=`rgba(20,0,0,${.02*P.age})`;sc.fillRect(0,0,W,H);sc.restore()}}
-}
-function floorSplat(d){const p=d.p;sc.save();sc.globalAlpha=p.alpha;const y=FLOOR+rnd(3,60),r=d.r;sc.fillStyle=colr(p,.9,d.col*.85);sc.beginPath();sc.ellipse(d.x,y,r*1.6,r*.55,0,0,6.3);sc.fill();for(let i=0;i<Math.round(p.sats*.4);i++){sc.beginPath();sc.arc(d.x+rnd(-1,1)*r*3,y+rnd(-1,1)*r*.9,rnd(.4,1.1),0,6.3);sc.fill()}sc.restore()}
-let autoT=0,art=null;
-// ---------- Darstellung ----------
-function draw(){
-  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#000';ctx.fillRect(0,0,cv.width,cv.height);{const S=K*VIEW.z*DPR;ctx.setTransform(S,0,0,S,VIEW.px*DPR,VIEW.py*DPR)}ctx.drawImage(bgc,0,0,W,H);
-  if(P.ledge||(P2&&P2.ledge)){ctx.fillStyle='rgba(30,28,27,.95)';ctx.fillRect(ledgeX0,ledgeY(),ledgeX1-ledgeX0,12);ctx.fillStyle='rgba(255,255,255,.18)';ctx.fillRect(ledgeX0,ledgeY(),ledgeX1-ledgeX0,2)}
-  ctx.drawImage(stain,0,0,W,H);ctx.drawImage(gloss,0,0,W,H);
-  // Läuferköpfe
-  for(const s of slides){const p=s.p,r=Math.min(Math.max(1,Math.cbrt(s.V)*.8*p.runSize),s.wMax!==undefined?Math.max(.8,s.wMax*.6):99);ctx.save();ctx.globalAlpha=p.alpha;const g=ctx.createRadialGradient(s.x-r*.3,s.y-r*.2,0,s.x,s.y,r*1.1);g.addColorStop(0,colr(p,1,s.col*1.6));g.addColorStop(1,colr(p,1,s.col*.8));ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(s.x,s.y+r*.15,r*.85,r*1.05,0,0,6.3);ctx.fill();if(p.gloss>0){ctx.fillStyle=`rgba(255,200,200,${.6*p.gloss})`;ctx.beginPath();ctx.ellipse(s.x-r*.3,s.y-r*.15,r*.22,r*.35,0,0,6.3);ctx.fill()}ctx.restore()}
-  // fliegende Tropfen
-  for(const d of drops){const sp=Math.hypot(d.vx,d.vy)||1,len=Math.min(22,sp*.016);ctx.save();ctx.globalAlpha=.95;ctx.strokeStyle=colr(d.p,1,d.col*1.2);ctx.lineWidth=d.r*1.4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-d.vx/sp*len,d.y-d.vy/sp*len);ctx.stroke();ctx.restore()}
-  // Debug
-  if(P.dbgWet||P.dbgPin||P.dbgThk){const im=ctx.createImageData(CW,CH);for(let i=0;i<CW*CH;i++){const w=P.dbgWet?wet[i]:0,pn=P.dbgPin?pin[i]:0,tt=P.dbgThk?Math.min(1,thk[i]/2):0;im.data[i*4]=255*pn+30*w+255*tt;im.data[i*4+1]=160*pn+120*w;im.data[i*4+2]=255*w+60*pn;im.data[i*4+3]=Math.min(210,(w+pn*.6+tt)*220)}const tc=document.createElement('canvas');tc.width=CW;tc.height=CH;tc.getContext('2d').putImageData(im,0,0);ctx.imageSmoothingEnabled=false;ctx.drawImage(tc,0,0,W,H);ctx.imageSmoothingEnabled=true}
-  if(P2){ctx.strokeStyle='rgba(255,255,255,.5)';ctx.setLineDash([8,6]);ctx.beginPath();ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(255,255,255,.85)';ctx.font='600 24px sans-serif';ctx.fillText('A: '+nameOf(preId),W*.1,50);ctx.fillText('B: '+nameOf(preId2),W/2+W*.05,50)}
-  // Zielhilfe
-  if(aim){ctx.strokeStyle='rgba(255,230,200,.9)';ctx.lineWidth=2;ctx.setLineDash([6,5]);ctx.beginPath();ctx.moveTo(aim.x0,aim.y0);ctx.lineTo(aim.x1,aim.y1);ctx.stroke();ctx.setLineDash([]);
-    const k=3.2,vx=(aim.x0-aim.x1)*k,vy=(aim.y0-aim.y1)*k;ctx.fillStyle='rgba(255,230,200,.6)';let x=aim.x0,y=aim.y0,ux=vx,uy=vy;for(let i=0;i<40;i++){ux+=0;uy+=G*.025;x+=ux*.025;y+=uy*.025;if(i%2)ctx.fillRect(x-1.5,y-1.5,3,3)}}
-  if(tool==='smear'&&mouse.in){ctx.strokeStyle='rgba(255,255,255,.5)';ctx.beginPath();ctx.arc(mouse.x,mouse.y,smearR,0,6.3);ctx.stroke()}
-}
-const nameOf=id=>(PRESETS.find(p=>p.id===id)||{n:id}).n;
-// ---------- Eingabe ----------
-const mouse={x:0,y:0,in:false,down:false};let aim=null,spraying=null,smearR=26,lastSmear=null;
-function pos(e){return[(e.clientX-VIEW.px)/(K*VIEW.z),(e.clientY-VIEW.py)/(K*VIEW.z)]}
-const ptrs=new Map();let pinch=null;
-let deferT=0,deferFn=null;const defer=fn=>{clearTimeout(deferT);deferFn=fn;deferT=setTimeout(()=>{if(deferFn&&ptrs.size===1&&!pinch){const f=deferFn;deferFn=null;f()}},70)};
-function cancelTool(){clearTimeout(deferT);deferFn=null;aim=null;spraying=null;lastSmear=null;art=null;mouse.down=false}
-function zoomAt(cx,cy,nz){const z0=VIEW.z;nz=clamp(nz,1,6);const wx=(cx-VIEW.px)/(K*z0),wy=(cy-VIEW.py)/(K*z0);VIEW.z=nz;VIEW.px=cx-wx*K*nz;VIEW.py=cy-wy*K*nz;clampView()}
-cv.addEventListener('wheel',e=>{e.preventDefault();zoomAt(e.clientX,e.clientY,VIEW.z*(e.deltaY<0?1.15:1/1.15))},{passive:false});
-cv.addEventListener('pointerdown',e=>{try{cv.setPointerCapture(e.pointerId)}catch(err){}ptrs.set(e.pointerId,[e.clientX,e.clientY]);
-  if(ptrs.size>=2){cancelTool();const[a,b]=[...ptrs.values()];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1])||1,z:VIEW.z,mx:(a[0]+b[0])/2,my:(a[1]+b[1])/2,wx:(((a[0]+b[0])/2)-VIEW.px)/(K*VIEW.z),wy:(((a[1]+b[1])/2)-VIEW.py)/(K*VIEW.z)};return}
-  const[x,y]=pos(e);mouse.x=x;mouse.y=y;mouse.down=true;const p=pOf(x);
-  if(tool==='set'){defer(()=>{const n=amtN(p,p.count);for(let i=0;i<n;i++){const r=dropR(p);const sp=n>1?18:0;drops.push({x:x+rnd(-1,1)*sp,y:y+rnd(-1,1)*sp,vx:rnd(-30,30),vy:rnd(-30,30),r,p,wallT:.0001,col:rnd(.85,1.1)})}})}
-  else if(tool==='vl'){defer(()=>vlStamp(x,y))}
-  else if(tool==='gush'){defer(()=>{const n=Math.min(400,Math.round(amtN(p,p.count)*p.gushMul));for(let i=0;i<n&&drops.length<1500;i++){const a=rnd(0,Math.PI*2),sp=rnd(60,720)*Math.pow(Math.random(),.6),rr=dropR(p);drops.push({x:x+rnd(-1,1)*14,y:y+rnd(-1,1)*10,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-120,r:rr,p,wallT:rnd(.03,.4),col:rnd(.85,1.1)})}})}
-  else if(tool==='shoot'){aim={x0:x,y0:y,x1:x,y1:y}}
-  else if(tool==='spray'){spraying={x,y,dx:0,dy:-1,t:0}}
-  else if(tool==='leak'){defer(()=>leaks.push({x,y,p,t:0}))}
-  else if(tool==='art'){defer(()=>{art={x,y,dx:0,dy:-1,p,t:0}})}
-  else if(tool==='smear'){lastSmear=[x,y]}
+  return { build: build };
 });
-cv.addEventListener('pointermove',e=>{if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,[e.clientX,e.clientY]);
-  if(pinch&&ptrs.size>=2){const[a,b]=[...ptrs.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1])||1,mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,nz=clamp(pinch.z*d/pinch.d,1,6);VIEW.z=nz;VIEW.px=mx-pinch.wx*K*nz;VIEW.py=my-pinch.wy*K*nz;clampView();return}
-  const[x,y]=pos(e);const ox=mouse.x,oy=mouse.y;mouse.x=x;mouse.y=y;mouse.in=true;
-  if(aim){aim.x1=x;aim.y1=y}
-  if(spraying){const d=Math.hypot(x-ox,y-oy);if(d>2){spraying.dx=(x-ox)/d;spraying.dy=(y-oy)/d}spraying.x=x;spraying.y=y}
-  if(art&&mouse.down){const d=Math.hypot(x-art.x,y-art.y);if(d>6){art.dx=(x-art.x)/d;art.dy=(y-art.y)/d}}
-  if(tool==='smear'&&mouse.down&&lastSmear)smear(x,y)});
-cv.addEventListener('pointerleave',()=>{mouse.in=false});
-function endPtr(e){ptrs.delete(e.pointerId);if(deferFn&&!pinch&&ptrs.size===0){const f=deferFn;deferFn=null;clearTimeout(deferT);f()}if(pinch){if(ptrs.size<2)pinch=null;if(ptrs.size===0)mouse.down=false;return}mouse.down=false;const[x,y]=pos(e);
-  if(aim){const k=3.2,vx=(aim.x0-x)*k,vy=(aim.y0-y)*k;if(Math.hypot(vx,vy)>40)shoot(aim.x0,aim.y0,vx,vy,pOf(aim.x0),pOf(aim.x0).count);aim=null}
-  spraying=null;lastSmear=null;if(tool==='art')art=null}
-cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);
-function smear(x,y){const[x0,y0]=lastSmear,d=Math.hypot(x-x0,y-y0);if(d<3)return;const r=smearR;
-  sc.save();sc.globalAlpha=.55;sc.beginPath();sc.arc(x,y,r,0,6.3);sc.clip();sc.drawImage(stain,(x0-r)*RES,(y0-r)*RES,r*2*RES,r*2*RES,x-r,y-r,r*2,r*2);sc.restore();
-  addWet(x,y,.5);
-  // frisches Blut in der Wischrichtung nachziehen
-  sc.save();sc.globalAlpha=.12;sc.strokeStyle=colr(P,1,.8);sc.lineWidth=r*.5;sc.lineCap='round';sc.beginPath();sc.moveTo(x0,y0);sc.lineTo(x,y);sc.stroke();sc.restore();
-  lastSmear=[x,y]}
-// ---------- Werkzeuge ----------
-const TOOLS=[['set','Tropfen setzen','Tippen: Tropfen treffen die Wand an dieser Stelle'],['shoot','Schießen','Ziehen: Pfeil gegen die Flugrichtung ziehen und loslassen; die Linie zeigt die Flugbahn'],['spray','Sprühen','Gedrückt halten und bewegen: Sprühstrahl in Bewegungsrichtung'],['vl','Vorlage setzen','Tippen: setzt die im Vorlagen-Labor (Optionen) gewählte Nachbildung deiner Blutvorlage an die Stelle'],['gush','Schwall','Tippen: deutlich mehr Tropfen auf einmal, in alle Richtungen gespritzt (Menge: „Schwall-Faktor“ in den Optionen)'],['leak','Quelle','Tippen: Wunde, aus der dauerhaft Tropfen sickern und ablaufen (mehrfach setzbar)'],['art','Arterie','Tippen und in Richtung ziehen: pulsierender Strahl, solange gedrückt'],['smear','Schmieren','Ziehen: vorhandenes Blut verwischen']];
-const tb=$('tools');
-let compact=true,optsOpen=false,full=false;
-function applyLayout(){document.body.classList.add('compact');document.body.classList.toggle('optsOpen',optsOpen);closePop();buildTools();buildTabs();buildPane()}
-let popEl=null;function setFull(on){full=on;if(on){try{const r=document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();if(r&&r.catch)r.catch(()=>{})}catch(e){}}else{try{if(document.fullscreenElement)document.exitFullscreen()}catch(e){}}applyLayout();if(on)toast('Vollbild: oben Menü, zum Beenden „Vollbild aus“ (oder Esc)')}
-document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&full){full=false;applyLayout()}});
-function closePop(){if(popEl){popEl.remove();popEl=null}}
-function openPop(anchor,items,cur,onPick){closePop();const el=document.createElement('div');el.className='pop';for(const[id,n,d]of items){const b=document.createElement('button');b.className=cur===id?'on':'';b.innerHTML=`${n}${d?`<small>${d}</small>`:''}`;b.onclick=()=>{closePop();onPick(id)};el.appendChild(b)}document.body.appendChild(el);const r=anchor.getBoundingClientRect();el.style.left=Math.min(r.right+6,innerWidth-el.offsetWidth-6)+'px';const top=Math.max(6,Math.min(r.top,innerHeight-el.offsetHeight-6));el.style.top=top+'px';el.style.maxHeight=(innerHeight-12)+'px';el.style.overflowY='auto';popEl=el;setTimeout(()=>document.addEventListener('pointerdown',function f(e){if(popEl&&!popEl.contains(e.target)&&e.target!==anchor){closePop()}document.removeEventListener('pointerdown',f)},{once:false}),0)}
-let toastT=0;function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('show'),2600)}
-function setTool(id){tool=id;buildTools();if(compact)toast(TOOLS.find(t=>t[0]===id)[1]+': '+TOOLS.find(t=>t[0]===id)[2])}
-function buildTools(){tb.innerHTML='';
-  const mkb=(t,f,on)=>{const b=document.createElement('button');b.textContent=t;if(on)b.className='on';b.onclick=f;tb.appendChild(b);return b};
-  const tbtn=mkb(TOOLS.find(t=>t[0]===tool)[1]+' ▾',()=>openPop(tbtn,TOOLS.map(t=>[t[0],t[1],t[2]]),tool,setTool),true);
-  const vb=mkb('Variante ▾',()=>openPop(vb,PRESETS.map(p=>[p.id,p.n,p.d]),preId,id=>{applyPreset(PRESETS.find(p=>p.id===id));buildTools();buildPane();toast('Variante: '+nameOf(id))}));
-  mkb(paused?'▶ Weiter':'❚❚ Pause',()=>{paused=!paused;buildTools()},paused);
-  mkb('Wand säubern',clearAll);
-  mkb(VL.win.open?'▣ Vorlagenfenster':'▢ Vorlagenfenster',()=>vlWinShow(!VL.win.open),VL.win.open);
-  mkb('⚙ Optionen',()=>{optsOpen=!optsOpen;document.body.classList.toggle('optsOpen',optsOpen);buildTools()},optsOpen);
-  if(EMB)mkb('✕ Zum Spiel',()=>parent.postMessage({zdLab:'close'},'*'))}
-$('winClose').onclick=()=>{optsOpen=false;document.body.classList.remove('optsOpen');buildTools()};
-function clearAll(){bloodTotal=0;sc.clearRect(0,0,W,H);gc.clearRect(0,0,W,H);drops=[];slides=[];pools=[];leaks=[];wet.fill(0);thk.fill(0)}
-// ---------- Optionsfenster ----------
-let tab='var';
-const tabsEl=$('tabs'),pane=$('pane');
-function buildTabs(){tabsEl.innerHTML='';
-  if(compact){const sel=document.createElement('select');sel.setAttribute('aria-label','Kategorie');for(const[id,n]of TABS)sel.add(new Option(n,id));sel.value=tab;sel.onchange=()=>{tab=sel.value;buildPane()};tabsEl.appendChild(sel);return}
-  for(const[id,n]of TABS){const b=document.createElement('button');b.textContent=n;b.className=tab===id?'on':'';b.onclick=()=>{tab=id;buildTabs();buildPane()};tabsEl.appendChild(b)}}
-function fmt(v,o){const st=o[6];return(st>=1?Math.round(v):st>=.1?(+v).toFixed(1):(+v).toFixed(2))}
-function buildPane(){
-  pane.innerHTML='';$('curPre').textContent=nameOf(preId)+(preId2&&P2?' | B: '+nameOf(preId2):'');
-  if(tab==='var'){pane.insertAdjacentHTML('beforeend','<h3>Variante wählen</h3><p class="hint">Jede Variante setzt alle Einstellungen. Danach in den anderen Reitern nachjustieren.</p>');
-    if(compact){const sel=document.createElement('select');sel.className='cselect';for(const p of PRESETS)sel.add(new Option(p.n,p.id));sel.value=PRESETS.some(p=>p.id===preId)?preId:'';if(sel.value!==preId)sel.add(new Option('eigene Einstellung',''),0),sel.value='';sel.onchange=()=>{const p=PRESETS.find(q=>q.id===sel.value);if(p){applyPreset(p);buildTools();buildPane()}};pane.appendChild(sel);const dsc=document.createElement('p');dsc.className='hint';dsc.textContent=(PRESETS.find(p=>p.id===preId)||{d:'Eigene Einstellungen'}).d;pane.appendChild(dsc)}else{const g=document.createElement('div');g.className='pre';for(const p of PRESETS){const b=document.createElement('button');b.className=preId===p.id?'on':'';b.innerHTML=`${p.n}<small>${p.d}</small>`;b.onclick=()=>{applyPreset(p);buildPane()};g.appendChild(b)}pane.appendChild(g)}
-    const rb=document.createElement('button');rb.textContent='Zufallsmix würfeln';rb.onclick=()=>{randomMix();buildPane()};pane.appendChild(rb);
-    pane.insertAdjacentHTML('beforeend','<h3>Vergleich nebeneinander</h3><p class="hint">Rechte Wandhälfte nutzt eine zweite Variante. So lassen sich zwei Looks beim gleichen Beschuss vergleichen.</p>');
-    const sel=document.createElement('select');sel.className='cselect';sel.add(new Option('aus (nur A)',''));for(const p of PRESETS)sel.add(new Option(p.n,p.id));sel.value=preId2;sel.onchange=()=>{preId2=sel.value;save();P2=preId2?Object.assign({},DEF,PRESETS.find(p=>p.id===preId2).v):null;buildPane()};pane.appendChild(sel);return}
-  if(tab==='vl'){buildVL();return}
-  if(tab==='info'){pane.innerHTML=INFO;return}
-  if(tab==='exp'){const ta=document.createElement('textarea');ta.id='expTa';ta.value=JSON.stringify(P,null,1);pane.insertAdjacentHTML('beforeend','<p>Aktuelle Einstellungen als Text. Mit „Kopieren“ lässt sich die gewählte Variante weitergeben, um sie ins Spiel zu übernehmen.</p>');pane.appendChild(ta);
-    const r=document.createElement('div');r.style.cssText='display:flex;gap:6px;flex-wrap:wrap';const m=document.createElement('div');m.className='msg';
-    const mkb=(t,f)=>{const b=document.createElement('button');b.textContent=t;b.onclick=f;r.appendChild(b)};
-    mkb('Kopieren',async()=>{ta.select();let ok=false;try{await navigator.clipboard.writeText(ta.value);ok=true}catch(e){try{ok=document.execCommand('copy')}catch(e2){}}m.textContent=ok?'Kopiert.':'Markiert – bitte Strg+C drücken.'});
-    mkb('Einlesen',()=>{try{const o=JSON.parse(ta.value);P=Object.assign({},DEF,o);preId='eigene';save();buildWall();buildPane();m.textContent='Eingelesen.'}catch(e){m.textContent='Kein gültiger Text.'}});
-    mkb('Zurücksetzen',()=>{applyPreset(PRESETS[0]);buildPane()});pane.appendChild(r);pane.appendChild(m);return}
-  for(const o of OPT.filter(o=>o[0]===tab)){
-    const[,k,t,label,mn,mx,st,df,tip,opts]=o;const row=document.createElement('div');
-    if(t==='b'){row.className='chk';const c=document.createElement('input');c.type='checkbox';c.id='o_'+k;c.checked=!!P[k];c.onchange=()=>{P[k]=c.checked;if(P2&&k!=='ledge')P2[k]=c.checked;save();touched()};const l=document.createElement('label');l.htmlFor=c.id;l.textContent=label;row.append(c,l);if(tip)l.title=tip}
-    else if(t==='s'){row.className='row';const l=document.createElement('label');l.textContent=label;l.htmlFor='o_'+k;const s=document.createElement('select');s.id='o_'+k;for(const[v,n]of opts)s.add(new Option(n,v));s.value=P[k];s.onchange=()=>{P[k]=s.value;save();if(k==='wall')buildWall();touched()};row.append(l,s)}
-    else{row.className='row';const l=document.createElement('label');l.textContent=label;l.htmlFor='o_'+k;const out=document.createElement('output');out.textContent=fmt(P[k],o);const r=document.createElement('input');r.type='range';r.id='o_'+k;r.min=mn;r.max=mx;r.step=st;r.value=P[k];r.oninput=()=>{P[k]=+r.value;out.textContent=fmt(+r.value,o);save();touched()};row.append(l,out,r);if(tip){const tp=document.createElement('div');tp.className='tip';tp.textContent=tip;row.appendChild(tp)}}
-    pane.appendChild(row)}
-}
-function touched(){if(preId!=='eigene'){preId='eigene';$('curPre').textContent='eigene Einstellung'+(P2?' | B: '+nameOf(preId2):'')}}
-function applyPreset(p){const wallKeep=P.wall,layKeep=P.layout;P=Object.assign({},DEF,p.v);P.layout=layKeep;if(!p.v.wall)P.wall=wallKeep;preId=p.id;save();buildWall();hintFlash()}
-function hintFlash(){}
-function randomMix(){const ps=['stern','flatsch','komet','nebel'];P=Object.assign({},DEF,{style:ps[Math.floor(Math.random()*4)],spread:rnd(.6,1.6),rough:rnd(.1,.8),rim:rnd(0,1),spines:Math.floor(rnd(0,24)),sats:Math.floor(rnd(0,24)),mist:rnd(0,.7),visc:rnd(.5,2.5),adhesion:rnd(.1,.6),runChance:rnd(.2,1),dark:rnd(.15,.55),wall:P.wall});preId='eigene';save()}
-const INFO=`<h3>Befund: Ist-Zustand im Spiel</h3><ul>
-<li>Wandaufprall = einige zufällige Ellipsen + Punkte. Größe hängt nur vom Radius ab, <b>nicht von der Geschwindigkeit</b>; die Flugrichtung wirkt nur auf den Startpunkt der Läufer.</li>
-<li>Läufer: nur 18 bis 30 % der Flecken; feste Fallgeschwindigkeit (max. 95 px/s), konstante Breite, <b>zufällige Länge</b> statt Volumen. Keine Zähigkeit, kein Trocknen, kein Ausfransen, kein Zusammenlaufen.</li>
-<li>Aufprallzeitpunkt zufällig (nicht geometrisch), Wand und Körper-Tropfen nur 40 bis 85 %. Danach nur Fleck, <b>kein Glanz</b>, kein Nachdunkeln.</li>
-<li>Keine Kanten: Läufer enden am Boden ohne Pfütze-Anbindung, es gibt kein Abtropfen von Vorsprüngen.</li></ul>
-<h3>Wie sich Blut an senkrechten Flächen verhält</h3><ul>
-<li><b>Aufprall:</b> Ausbreitung wächst mit Tropfengröße und Geschwindigkeit (grob Aufprallenergie^¼). Schräg = ovaler Fleck, Spitze zeigt zur Herkunft des Tropfens; bei hoher Energie Randwulst, Spritzfinger und Satellitentropfen.</li>
-<li><b>Haften:</b> Ein Tropfen rutscht erst, wenn sein Gewicht die Haftung übersteigt (Volumen-Schwelle, abhängig von Oberfläche: Glas klein, Beton groß).</li>
-<li><b>Laufen:</b> Kopf (Kugelwulst) und dünne Spur. Die Spur frisst Volumen, deshalb werden Läufer kürzer und enden in einem Tropfen. Geschwindigkeit ~ Volumen / Zähigkeit.</li>
-<li><b>Rauigkeit:</b> Haftstellen bremsen, Läufer schlängeln und halten kurz an (Stop-and-go).</li>
-<li><b>Nässe:</b> Nasse Spuren ziehen weitere Läufer an, sie vereinigen sich und werden schneller.</li>
-<li><b>Trocknen:</b> Blut wird zäher (Gerinnung) und dunkler; alte Läufer stoppen, alte Flecken sind matt.</li>
-<li><b>Kanten:</b> An Simsen sammelt sich Blut und tropft ab, sobald der hängende Tropfen schwer genug ist.</li></ul>
-<h3>Im Labor umgesetzt</h3><p>Aufprallformen (Stern, Flatsch, Komet, Nebel), Läufer mit Volumen, Zähigkeit, Haftkarte, Nässespur mit Anziehung, Perlen, Trocknen, Glanz, Sims mit Abtropfen, Boden. Unter „Export“ lässt sich eine Einstellung kopieren.</p>`;
-
-// ---------- Vorlagen-Labor: deine Blutvorlagen (textures/blood) als Abläufe nachbauen ----------
-// Jede Vorlage hat eine physikalische Ursache; daraus ergeben sich die Bauteile der Nachbildung. Die bestehenden Tropfen und Läufer bleiben unverändert.
-const VLK={
- cut:{n:'Schnitt (Schleuderspur)',game:'Messer, Axt, Skalpell: Schnitt an der Wand',why:'Klinge/Hieb schleudert Blut in Schwungrichtung ab: 2–3 parallele Streifen (Blutfilm auf der Klinge reißt in Fäden), vorn dick, nach hinten dünn auslaufend; entlang der Bahn lösen sich längliche Tropfen („Perlenkette“), am Ende winzige Satelliten.'},
- boom:{n:'Explosion',game:'Heftiger Treffer / Zerreißen eines Körperteils',why:'Sehr hohe Energie: Blut platzt aus kleinem Kern in alle Richtungen. Der Kern ist zerlappt, davon gehen verzweigte, dünne Zacken ab (Flüssigkeit reißt in Fäden), außen dichter Feinspray aus Punkten und kurzen Strichen.'},
- smear:{n:'Wischen (Verschmieren)',game:'Verschmieren eines Körperteils an der Wand',why:'Hand/Körper zieht nasses Blut über die Wand: viele parallele Borsten-Streifen, am Anfang kräftig und deckend, zum Ende hin „trocken“ mit Lücken und blasser; Rand unruhig.'},
- thud:{n:'Schlag (dumpfer Aufprall)',game:'Hammerschlag',why:'Schwerer Stoß auf eine Blutansammlung: dicker, dunkler Kern mit Glanz, Kranz aus Fingern in alle Richtungen (Kronenbildung), dazu einzelne große ovale Tropfen in mittlerem Abstand und feiner Sprühnebel außen.'},
- mist:{n:'Nebel (Sprühnebel)',game:'Sprühnebel um heftige Treffer',why:'Blut wird durch Druck/Zerreißen fein zerstäubt: sehr viele winzige Punkte, dicht in der Mitte, nach außen nach einer Glockenkurve dünner; wenige größere Spritzer dazwischen.'}
-};
-const VLO={
- cut:[['angle','Richtung (°)',-180,180,1,-39],['streaks','Streifen',1,4,1,2],['length','Länge',.4,2.2,.01,1.55],['beads','Perlen/Satelliten',0,2,.01,1.3],['thick','Dicke',.4,2.4,.01,1.7]],
- boom:[['energy','Energie',.4,2,.01,1],['tendrils','Zacken',6,40,1,16],['streak','Zackenlänge',.4,2,.01,.9],['spray','Feinspray',0,2.5,.01,1.7]],
- smear:[['angle','Richtung (°)',-180,180,1,-26],['length','Länge',.4,2,.01,1.45],['width','Breite',.4,2.6,.01,1.9],['bristles','Borsten',.3,2.5,.01,1.4],['dry','Trockenheit',0,1,.01,.55]],
- thud:[['energy','Wucht',.4,2,.01,1],['fingers','Finger',4,32,1,22],['big','Große Tropfen',0,16,1,9],['spray','Feinspray',0,2.5,.01,1.6],['rough','Kernunruhe',0,1,.01,.6]],
- mist:[['radius','Radius',.4,2.5,.01,1.7],['density','Dichte',.2,3,.01,2],['size','Punktgröße',.3,2.5,.01,.75]]
-};
-const VLC=[['runChance','Läufer-Chance',0,1,.01,.5],['runCount','Läuferzahl',1,6,1,2],['runSize','Läufergröße',.1,2,.01,.5],['adhesion','Haftung',0,1,.01,0],['visc','Zähigkeit',.3,6,.01,2.6],['speedScale','Geschwindigkeit',.05,1,.01,.2],['trailW','Spurbreite',.3,2.5,.01,1],['film','Film-Verbrauch',.2,3,.01,1.5],['wetCarry','Nässe trägt',0,1,.01,.75],['pickup','Aufnahme',0,1.5,.01,.8],['gapChance','Strichunterbrechung',0,1,.01,.25],['dark','Dunkelheit',0,1,.01,.35],['alpha','Deckkraft',.2,1,.01,.85]];
-for(const k in VLO)VLO[k]=VLO[k].concat(VLC);
-const VL={sel:'thud',seed:1,scale:1,use:{cut:false,boom:false,smear:false,thud:false,mist:false}};
-for(const k in VLO){VL[k]={};VLO[k].forEach(o=>VL[k][o[0]]=o[5])}
-try{const q=JSON.parse(localStorage.getItem('blutlabor_vl')||'null');if(q)for(const k in q)if(VL[k]&&typeof q[k]==='object')Object.assign(VL[k],q[k]);if(q&&VLK[q.sel])VL.sel=q.sel;if(q&&q.scale)VL.scale=q.scale;if(q&&q.use)Object.assign(VL.use,q.use)}catch(e){}
-const vlSave=()=>{try{localStorage.setItem('blutlabor_vl',JSON.stringify(VL))}catch(e){}};
-function mul32(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-let VLG=0,VLD=.35;const vc=(a,k)=>colr({dark:VLD},a,k);function vlSet(o){VLG=o.gapChance;VLD=o.dark}
-function vBlob(c,r,x,y,R,rough,k,al=1){const n=40,sd=r()*50;c.beginPath();for(let i=0;i<n;i++){const a=i/n*Math.PI*2,rr=R*(1+rough*(fbm(Math.cos(a)*1.4+sd,Math.sin(a)*1.4+sd)-.5)*2.2);i?c.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr):c.moveTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr)}c.closePath();c.fillStyle=vc(al,k);c.fill()}
-function vSpike(c,x,y,a,r0,len,w0,k,curve=0,nogap){
- if(!nogap&&VLG>0&&len>12&&Math.random()<VLG){const l1=len*rnd(.5,.72),gap=clamp(w0*1.6+3,3,9);vSpike(c,x,y,a,r0,l1,w0,k,curve*.5,true);return vSpike(c,x,y,a+curve*.35,r0+l1+gap,len*rnd(.2,.38),w0*.55,k,curve*.3,true)}
- const N=8,L=[],Rr=[];let px=x+Math.cos(a)*r0,py=y+Math.sin(a)*r0,ex=px,ey=py;for(let i=0;i<=N;i++){const t=i/N,aa=a+curve*t,cx=px+Math.cos(a)*len*t+Math.cos(a+Math.PI/2)*curve*len*t*t*.5,cy=py+Math.sin(a)*len*t+Math.sin(a+Math.PI/2)*curve*len*t*t*.5,w=w0*Math.pow(1-t,.8)+.2;L.push([cx-Math.sin(aa)*w,cy+Math.cos(aa)*w]);Rr.push([cx+Math.sin(aa)*w,cy-Math.cos(aa)*w]);ex=cx;ey=cy}
- c.fillStyle=vc(.93,k);c.beginPath();L.forEach((q,i)=>i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));for(let i=N;i>=0;i--)c.lineTo(Rr[i][0],Rr[i][1]);c.closePath();c.fill();return[ex,ey]}
-function vDot(c,x,y,r,k,al=.9){c.fillStyle=vc(al,k);c.beginPath();c.arc(x,y,Math.max(.35,r),0,6.3);c.fill()}
-function vDrop(c,x,y,rx,ry,rot,k){c.fillStyle=vc(.95,k);c.beginPath();c.ellipse(x,y,Math.max(.4,rx),Math.max(.3,ry),rot,0,6.3);c.fill()}
-const VLF={
- thud(c,r,x,y,s,o){const R0=40*s*(.7+.6*o.energy);
-  vBlob(c,r,x,y,R0*1.05,o.rough*.9,.8);vBlob(c,r,x+R0*.1,y-R0*.05,R0*.8,o.rough,.95);vBlob(c,r,x-R0*.15,y+R0*.1,R0*.55,o.rough*1.2,.7,.85);
-  c.save();c.globalAlpha=.3;const g=c.createRadialGradient(x-R0*.25,y-R0*.3,0,x-R0*.25,y-R0*.3,R0*.55);g.addColorStop(0,vc(.9,1.8));g.addColorStop(1,vc(0,1));c.fillStyle=g;c.beginPath();c.arc(x-R0*.25,y-R0*.3,R0*.55,0,6.3);c.fill();c.restore();
-  for(let i=0;i<o.fingers;i++){const a=i/o.fingers*Math.PI*2+(r()-.5)*.5,L=R0*(.3+r()*1.2*o.energy)*(r()<.2?1.7:1),w0=R0*(.1+r()*.12),e=vSpike(c,x,y,a,R0*.6,L,w0,.9,(r()-.5)*.5);if(r()<.55)vDrop(c,e[0]+Math.cos(a)*(3+r()*8),e[1]+Math.sin(a)*(3+r()*8),w0*.7,w0*.5,a,.9)}
-  for(let i=0;i<o.big;i++){const a=r()*Math.PI*2,d=R0*(1.4+r()*1.8),rx=R0*(.09+r()*.15);vDrop(c,x+Math.cos(a)*d,y+Math.sin(a)*d,rx,rx*(.55+r()*.3),a,.85)}
-  for(let i=0;i<200*o.spray;i++){const a=r()*Math.PI*2,d=R0*(1.2+Math.pow(r(),1.5)*3.2);vDot(c,x+Math.cos(a)*d,y+Math.sin(a)*d,.5+r()*1.6,1)}},
- boom(c,r,x,y,s,o){const R0=34*s*(.6+.8*o.energy);
-  for(let j=0;j<7;j++){const a=r()*Math.PI*2,d=R0*.55*r();vBlob(c,r,x+Math.cos(a)*d,y+Math.sin(a)*d,R0*(.45+r()*.5),.95,.9)}
-  for(let i=0;i<o.tendrils;i++){const a=r()*Math.PI*2,L=R0*(.7+r()*2.1*o.energy)*o.streak,w0=R0*(.08+r()*.11),cv=(r()-.5)*.6,e=vSpike(c,x,y,a,R0*.6,L,w0,.9,cv);
-   if(r()<.6){const bx=x+Math.cos(a)*(R0*.6+L*.6),by=y+Math.sin(a)*(R0*.6+L*.6);vSpike(c,bx,by,a+.28,0,L*.35,w0*.5,.9,0);vSpike(c,bx,by,a-.28,0,L*.3,w0*.45,.9,0)}
-   if(r()<.7)vDot(c,e[0]+Math.cos(a)*5,e[1]+Math.sin(a)*5,w0*.8,.9)}
-  for(let i=0;i<420*o.spray;i++){const a=r()*Math.PI*2,d=R0*(1.3+Math.pow(r(),1.2)*3.4);vDot(c,x+Math.cos(a)*d,y+Math.sin(a)*d,.35+r()*1.1,1)}
-  for(let i=0;i<40*o.spray;i++){const a=r()*Math.PI*2,d=R0*(1.8+r()*2.6);vSpike(c,x+Math.cos(a)*d,y+Math.sin(a)*d,a,0,4+r()*12,.7,.9,0)}},
- cut(c,r,x,y,s,o){const a=o.angle*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a),N=o.streaks;
-  for(let j=0;j<N;j++){const L=150*s*o.length*(.8+r()*.4),off=(j-(N-1)/2)*30*s*(.6+o.thick*.4)+(r()-.5)*8*s,sx=x-ca*L/2-sa*off,sy=y-sa*L/2+ca*off,w0=7*s*o.thick*(.8+r()*.5);
-   const strip=(tA,tB,ws)=>{const Lp=[],Rp=[],M=26;for(let i=0;i<=M;i++){const f=i/M,t=tA+(tB-tA)*f,wob=Math.sin(t*7+j*2)*1.6*s,cx=sx+ca*L*t-sa*wob,cy=sy+sa*L*t+ca*wob,w=Math.max(.5,w0*ws*(.25+.75*Math.sin(Math.PI*Math.pow(Math.min(1,t*1.15),.55)))*(1-.78*t*t)*(tA>0?1-.5*f:1));Lp.push([cx-sa*w,cy+ca*w]);Rp.push([cx+sa*w,cy-ca*w])}
-    c.fillStyle=vc(.95,.9);c.beginPath();Lp.forEach((q,i)=>i?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]));for(let i=M;i>=0;i--)c.lineTo(Rp[i][0],Rp[i][1]);c.closePath();c.fill()};
-   if(VLG>0&&Math.random()<VLG){const t1=.5+r()*.28,gt=(w0*1.5+3)/L;strip(0,t1,1);strip(t1+gt,Math.min(1,t1+gt+.2+r()*.2),.8)}else strip(0,1,1);
-   vDrop(c,sx+ca*L*.14,sy+sa*L*.14,w0*1.7,w0*1.05,a,.85);
-   for(let i=0;i<6*o.beads;i++){const t=.2+r()*.95,lat=(r()-.5)*10*s,bx=sx+ca*L*t-sa*lat,by=sy+sa*L*t+ca*lat,sz=(2+r()*3)*s;vDrop(c,bx,by,sz*(1+t),sz*.6,a,.95)}
-   for(let i=0;i<5*o.beads;i++){const t=1.02+i*.07+r()*.05;vDot(c,sx+ca*L*t,sy+sa*L*t,(3.2-i*.5)*s*(.7+r()*.6),.95)}
-   for(let i=0;i<28*o.beads;i++){const t=r()*1.1,lat=(r()-.5)*40*s;vDot(c,sx+ca*L*t-sa*lat,sy+sa*L*t+ca*lat,.5+r()*1.2,1)}}},
- smear(c,r,x,y,s,o){const a=o.angle*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a),Lm=200*s*o.length,Wm=70*s*o.width,n=Math.round(34*o.bristles);
-  for(let i=0;i<n;i++){const u=(r()-.5)*Wm,f=1-Math.pow(2*u/Wm,2)*.3,len=Lm*(.45+.55*r())*(.7+.3*f),st=r()*.2*Lm,bw=(2.5+r()*8*s),a0=.34*(.6+r()*.6);let t=0;
-   while(t<len){const seg=6+r()*28,gap=r()<o.dry*(t/len)*1.2?4+r()*14:0,al=a0*(1-o.dry*.8*(t/len)),k=r()<.25?1.4:1.0;c.strokeStyle=vc(Math.max(.05,al),k);c.lineWidth=bw*(1-.3*t/len);c.lineCap='round';c.beginPath();const px=x-ca*Lm/2-sa*u+ca*(st+t),py=y-sa*Lm/2+ca*u+sa*(st+t);c.moveTo(px,py);c.lineTo(px+ca*seg,py+sa*seg);c.stroke();t+=seg+gap}}
-  c.save();c.translate(x-ca*Lm/2,y-sa*Lm/2);c.rotate(a);c.fillStyle=vc(.22,.9);c.beginPath();c.ellipse(Lm*.05,0,Lm*.045,Wm*.3,0,0,6.3);c.fill();c.restore();
-  for(let i=0;i<5;i++){const t=r()*.6,u=(r()-.5)*Wm;vDrop(c,x-ca*Lm/2-sa*u+ca*Lm*t,y-sa*Lm/2+ca*u+sa*Lm*t,3+r()*4,2+r()*2,a,.8)}},
- mist(c,r,x,y,s,o){const R=70*s*o.radius,N=Math.round(520*o.density);
-  for(let i=0;i<N;i++){const a=r()*Math.PI*2,d=R*Math.sqrt(-2*Math.log(Math.max(1e-6,r())))*.5;vDot(c,x+Math.cos(a)*Math.min(d,R*2.4),y+Math.sin(a)*Math.min(d,R*2.4),(.4+Math.pow(r(),3)*4*o.size)*s,1,.4+.5*r())}
-  for(let i=0;i<10;i++){const a=r()*Math.PI*2,d=R*r()*.9;vDrop(c,x+Math.cos(a)*d,y+Math.sin(a)*d,(2.5+r()*3)*s,(1.6+r()*2)*s,a,.9)}}
-};
-function vlSrc(kind,x,y,s,o){ // Mitten der dicken Stellen, aus denen Läufer entstehen können
-  if(kind==='thud'){const R0=40*s*(.7+.6*o.energy);return[{x,y,R:R0,r:R0/3.3}]}
-  if(kind==='boom'){const R0=34*s*(.6+.8*o.energy)*.8;return[{x,y,R:R0,r:R0/4}]}
-  if(kind==='cut'){const a=o.angle*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a),L=150*s*o.length,w0=7*s*o.thick,out=[];for(let j=0;j<o.streaks;j++){const off=(j-(o.streaks-1)/2)*30*s*(.6+o.thick*.4);out.push({x:x-ca*L/2-sa*off+ca*L*.14,y:y-sa*L/2+ca*off+sa*L*.14,R:w0*1.7,r:w0*.85})}return out}
-  if(kind==='smear'){const a=o.angle*Math.PI/180,Lm=200*s*o.length,Wm=70*s*o.width;return[{x:x-Math.cos(a)*Lm/2,y:y-Math.sin(a)*Lm/2,R:Wm*.3,r:Wm*.05}]}
-  return[]}
-function vlRuns(srcs,o){
-  const pp=Object.assign({},P,{runSize:1,adhesion:o.adhesion,visc:o.visc,speedScale:o.speedScale,trailW:o.trailW,film:o.film,wetCarry:o.wetCarry,pickup:o.pickup,alpha:o.alpha,dark:o.dark}),Vc0=lerp(8,400,o.adhesion);
-  for(const sr of srcs){if(sr.y>=FLOOR-6)continue;addWet(sr.x,sr.y,.6);if(Math.random()>o.runChance)continue;
-    const n=Math.max(1,Math.round(o.runCount*rnd(.6,1.4)));
-    for(let i=0;i<n&&slides.length<300;i++){const u=Math.sqrt(Math.random()),ang=rnd(.15,Math.PI-.15);
-      slides.push({p:pp,x:sr.x+Math.cos(ang)*sr.R*u*.9,y:sr.y+Math.sin(ang)*sr.R*u*.7+sr.R*.1,vx:0,V:Vc0*(1+3*o.runSize)*rnd(.7,1.3),V0:Vc0,age:0,px:0,py:0,stuck:0,go:true,seed:Math.random()*100,col:rnd(.9,1.1),len:0,wMax:.9+4*o.runSize,bx:sr.x,by:sr.y,bR:sr.R})}}}
-function vlStamp(x,y){const o=VL[VL.sel],c=sc;vlSet(o);c.save();c.beginPath();c.rect(0,0,W,FLOOR-2);c.clip();c.globalAlpha=o.alpha;VLF[VL.sel](c,mul32((Math.random()*1e9)|0),x,y,VL.scale,o);c.restore();bloodTotal+=300;vlRuns(vlSrc(VL.sel,x,y,VL.scale,o),o)}
-function vlPreview(cvp){const c=cvp.getContext('2d');c.setTransform(1,0,0,1,0,0);c.fillStyle='#c8c4be';c.fillRect(0,0,cvp.width,cvp.height);vlSet(VL[VL.sel]);c.save();c.globalAlpha=VL[VL.sel].alpha;VLF[VL.sel](c,mul32(VL.seed),cvp.width/2,cvp.height/2,VL.scale,VL[VL.sel]);c.restore()}
-// Verschiebbares Vorschaufenster: Original links, Nachbau rechts; bleibt über allen Reitern stehen
-let vlWin=null,vlCv=null,vlImg=null,vlTitle=null;
-VL.win=VL.win||{x:176,y:64,big:false,open:false};
-try{const q=JSON.parse(localStorage.getItem('blutlabor_vl')||'null');if(q&&q.win)Object.assign(VL.win,q.win)}catch(e){}
-function vlWinPlace(){if(!vlWin)return;const w=VL.win,ww=w.big?460:290;vlWin.style.width=ww+'px';w.x=clamp(w.x,0,Math.max(0,innerWidth-ww));w.y=clamp(w.y,0,Math.max(0,innerHeight-60));vlWin.style.left=w.x+'px';vlWin.style.top=w.y+'px'}
-function vlWinEnsure(){
-  if(vlWin)return;vlWin=document.createElement('div');vlWin.className='vlwin';vlWin.style.display='none';
-  const head=document.createElement('div');head.className='vlhead';vlTitle=document.createElement('span');head.appendChild(vlTitle);
-  const bs=document.createElement('button');bs.textContent='⤢';bs.title='Größe umschalten';bs.onclick=()=>{VL.win.big=!VL.win.big;vlWinPlace();vlSave()};
-  const bx=document.createElement('button');bx.textContent='✕';bx.title='Schließen';bx.onclick=()=>vlWinShow(false);head.append(bs,bx);
-  const body=document.createElement('div');body.className='vlbody';vlImg=document.createElement('img');vlImg.alt='Original';vlImg.onerror=()=>{vlImg.style.visibility='hidden'};vlImg.onload=()=>{vlImg.style.visibility='visible'};
-  vlCv=document.createElement('canvas');vlCv.width=380;vlCv.height=320;body.append(vlImg,vlCv);
-  const cap=document.createElement('div');cap.className='vlcap';cap.innerHTML='<span>Original</span><span>Nachbau</span>';
-  const act=document.createElement('div');act.className='vlact';
-  const dice=document.createElement('button');dice.textContent='Würfeln';dice.onclick=()=>{VL.seed=(Math.random()*1e6)|0;vlRedraw()};
-  const put=document.createElement('button');put.textContent='An Wand setzen';put.title='Aktiviert das Werkzeug „Vorlage setzen“';put.onclick=()=>{tool='vl';buildTools();toast('Vorlage setzen: auf die Wand tippen')};
-  act.append(dice,put);vlWin.append(head,body,cap,act);document.body.appendChild(vlWin);
-  // Verschieben am Kopf
-  let drag=null;head.addEventListener('pointerdown',e=>{if(e.target.tagName==='BUTTON')return;drag={dx:e.clientX-VL.win.x,dy:e.clientY-VL.win.y};try{head.setPointerCapture(e.pointerId)}catch(err){}});
-  head.addEventListener('pointermove',e=>{if(!drag)return;VL.win.x=e.clientX-drag.dx;VL.win.y=e.clientY-drag.dy;vlWinPlace()});
-  const end=()=>{if(drag){drag=null;vlSave()}};head.addEventListener('pointerup',end);head.addEventListener('pointercancel',end);
-  window.addEventListener('resize',vlWinPlace);
-}
-function vlWinUpdate(){if(!vlWin)return;vlTitle.textContent='Vorlage: '+VLK[VL.sel].n;vlImg.style.visibility='hidden';vlImg.src='textures/blood/'+VL.sel+'.png'}
-function vlWinShow(on){vlWinEnsure();VL.win.open=on;if(!on){VL.win.x=176;VL.win.y=64;VL.win.big=false}vlWin.style.display=on?'block':'none';if(on){vlWinPlace();vlWinUpdate();vlPreview(vlCv)}vlSave();buildTools()}
-function vlRedraw(){if(vlWin&&vlWin.style.display!=='none')vlPreview(vlCv);vlSave()}
-function buildVL(){
-  pane.insertAdjacentHTML('beforeend','<h3>Vorlage wählen</h3>');
-  const sel=document.createElement('select');sel.className='cselect';for(const k in VLK)sel.add(new Option(VLK[k].n,k));sel.value=VL.sel;sel.onchange=()=>{VL.sel=sel.value;vlSave();vlWinUpdate();vlRedraw();buildPane()};pane.appendChild(sel);
-  const why=document.createElement('p');why.className='hint';why.textContent=VLK[VL.sel].why;pane.appendChild(why);
-  const use=document.createElement('div');use.className='chk';const uc=document.createElement('input');uc.type='checkbox';uc.id='vl_use';uc.checked=!!VL.use[VL.sel];uc.onchange=()=>{VL.use[VL.sel]=uc.checked;vlSave()};const ul=document.createElement('label');ul.htmlFor='vl_use';ul.textContent='Im Spiel statt meinem Originalbild nutzen';use.append(uc,ul);pane.appendChild(use);
-  const ug=document.createElement('p');ug.className='hint';ug.textContent='Wird im Spiel ausgelöst: '+VLK[VL.sel].game+'. Neu ab dem nächsten Schließen des Labors.';pane.appendChild(ug);
-  const tg=document.createElement('button');tg.textContent=VL.win.open?'Vorschaufenster schließen':'Vorschaufenster öffnen (Original + Nachbau)';tg.className=VL.win.open?'on':'';tg.onclick=()=>{vlWinShow(!VL.win.open);buildPane()};pane.appendChild(tg);
-  const sl=(label,obj,key,mn,mx,st)=>{const row=document.createElement('div');row.className='row';const l=document.createElement('label');l.textContent=label;const out=document.createElement('output');out.textContent=(+obj[key]).toFixed(st>=1?0:2);const r=document.createElement('input');r.type='range';r.min=mn;r.max=mx;r.step=st;r.value=obj[key];r.oninput=()=>{obj[key]=+r.value;out.textContent=(+r.value).toFixed(st>=1?0:2);vlRedraw()};row.append(l,out,r);pane.appendChild(row)};
-  for(const[k,label,mn,mx,st]of VLO[VL.sel])sl(label,VL[VL.sel],k,mn,mx,st);
-  sl('Größe',VL,'scale',.3,2.5,.01);
-  const rb=document.createElement('button');rb.textContent='Neu würfeln';rb.onclick=()=>{VL.seed=(Math.random()*1e6)|0;vlRedraw()};pane.appendChild(rb);
-  const rs=document.createElement('button');rs.textContent='Zurücksetzen';rs.onclick=()=>{VLO[VL.sel].forEach(o=>VL[VL.sel][o[0]]=o[5]);VL.scale=1;vlSave();vlRedraw();buildPane()};pane.appendChild(rs);
-  const tp=document.createElement('p');tp.className='hint';tp.textContent='Das Vorschaufenster lässt sich am Kopf verschieben und bleibt über allen Reitern stehen. Zum Ausprobieren an der Wand: „Vorlage setzen“ wählen und tippen.';pane.appendChild(tp);
-}
-// ---------- Schleife ----------
-let last=performance.now(),fps=0,fc=0,ft=0;
-function frame(now){const dt0=Math.min(.05,(now-last)/1000);last=now;fc++;ft+=dt0;if(ft>.5){fps=Math.round(fc/ft);fc=0;ft=0}
-  if(!paused){const dt=dt0*P.timeScale,n=Math.max(1,Math.ceil(dt/.012));for(let i=0;i<n;i++)step(dt/n);
-    if(spraying){const p=pOf(spraying.x);spraying.t+=dt;const per=1/(p.sprayRate*Math.sqrt(p.amount));while(spraying.t>0){spraying.t-=per;const a=Math.atan2(spraying.dy,spraying.dx)+rnd(-1,1)*.25,s=rnd(500,1100);newDrop(spraying.x,spraying.y,Math.cos(a)*s,Math.sin(a)*s,dropR(p),p)}}}
-  draw();$('hud').textContent=`${fps} fps · Tropfen ${drops.length} · Läufer ${slides.length} · Quellen ${leaks.length} · Blut ${Math.round(bloodTotal/100)}`;requestAnimationFrame(frame)}
-window.__lab={get slides(){return slides},hit,step,clearAll,get P(){return P},rnd,blobRuns,vlStamp,VL};
-applyLayout();
-if(VL.win.open)vlWinShow(true);
-{const sp=['stern','flatsch','komet','nebel'];const keep=P.style;[[.14,.2],[.34,.16],[.52,.24],[.72,.18],[.86,.3],[.28,.38]].forEach(([fx,fy],i)=>{const p=Object.assign({},P,{style:keep==='auto'?sp[i%4]:keep});for(let k=0;k<(i===2?4:1);k++)drops.push({x:W*fx+rnd(-30,30),y:H*fy+rnd(-20,20),vx:rnd(-60,60),vy:rnd(-60,60),r:i%2?7:5,p,wallT:.001,col:rnd(.9,1.1)})});for(let i=0;i<500;i++)step(.016)}
-requestAnimationFrame(frame);
-})();
+const $ = (i) => document.getElementById(i);
+const msg = (t, e) => { $('msg').textContent = t; $('msg').className = e ? 'err' : ''; };
+const u8 = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+async function dec(key, data) { return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: data.slice(0, 12) }, key, data.slice(12))); }
+async function load(name) { const r = await fetch(name); if (!r.ok) throw new Error(name); return u8((await r.text()).trim()); }
+$('f').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const pw = $('code').value.trim().toUpperCase();
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date());
+  const w = WR[day];
+  if (!w) { msg('Diese Vorschau ist abgelaufen und muss neu veröffentlicht werden.', 1); return; }
+  if (pw.length !== 6) { msg('Der Code hat 6 Zeichen.', 1); return; }
+  $('go').disabled = true; msg('Prüfe Code …');
+  let raw;
+  try {
+    const bk = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    const wk = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: u8(w[0]), iterations: ITER, hash: 'SHA-256' }, bk, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    raw = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8(w[1]) }, wk, u8(w[2])));
+  } catch (e) { msg('Falscher Code.', 1); $('go').disabled = false; return; }
+  try {
+    const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    msg('Lade Spiel …');
+    const man = JSON.parse(new TextDecoder().decode(await dec(key, await load('m.txt'))));
+    const files = new Map();
+    for (let i = 0; i < man.n; i++) {
+      msg('Lade Spiel … ' + (i + 1) + '/' + man.n);
+      const ch = await dec(key, await load('c' + i + '.txt'));
+      for (const f in man.files) { const m = man.files[f]; if (m.c === i) files.set(f, { bytes: ch.subarray(m.o, m.o + m.l), type: m.t }); }
+    }
+    const V = { files };
+    window.__VFS = V; window.__SHIMSRC = SHIM.toString();
+    const api = SHIM(V, window.__SHIMSRC, false);
+    const fr = document.createElement('iframe');
+    fr.id = 'game'; fr.setAttribute('allow', 'fullscreen; autoplay'); fr.title = 'Zombie Dismemberment';
+    fr.srcdoc = api.build('index.html', '');
+    $('lock').remove(); document.body.appendChild(fr);
+  } catch (e) { msg('Laden fehlgeschlagen: ' + e.message, 1); $('go').disabled = false; }
+});
 </script>
-
-</html>
